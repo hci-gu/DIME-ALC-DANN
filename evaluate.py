@@ -1,5 +1,12 @@
+import torch
+from model import DANN
 
+@torch.no_grad()
+def eval(model: DANN, eval_loader):
+    model.eval()
+    pass
 
-
-def eval():
+@torch.no_grad()
+def test_evaluation(model: DANN, eval_loader):
+    model.eval()
     pass
