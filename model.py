@@ -3,7 +3,9 @@ import torch.nn as nn
 
 from params import Params
 from torch.nn import Module
+from torchsummary import summary
 from utils.gradient_reversal import ReverseLayerF
+from utils.layer_creation import make_layers
 
 
 class DANN(Module):
@@ -55,3 +57,5 @@ if __name__ == "__main__":
     
     p = Params()
     dann = DANN(p)
+    example_input = torch.randn((1,28,28))
+    summary(dann, example_input)
