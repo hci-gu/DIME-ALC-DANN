@@ -44,6 +44,9 @@ for (root,dirs,files) in os.walk(ROOT_DIR,topdown=True):
             print(f"[{idx:5}] | Copied file {source_path} -> {target_path}")
         else:
             print(f"[{idx:5}] | Copied file {source_path} -> {target_path}")
-            shutil.copy(source_path,target_path)
+            try:
+                shutil.copy(source_path,target_path)
+            except:
+                print(f"File {target_path} already exists")
 
         idx += 1
