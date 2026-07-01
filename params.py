@@ -14,20 +14,27 @@ class Params():
     lr: float = 0.001
     batch_size: int = 32
     n_workers: int = 1
-    device: torch.device = field(default_factory=lambda: torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-    p_optim_metric: str = "loss"
+    device: str = field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
+    optim_metric: str = "loss"
     pin_memory: bool = field(default_factory=lambda: torch.cuda.is_available())
-    stopping_criterion: EarlyStopping = field(default_factory=EarlyStopping)
+
+
+    # Early stopping
+    early_stopping_patience: int | None = 10
+    early_stopping_min_delta: float = 0.0 
+    early_stopping_restore_best_weights: bool = True
+    early_stopping_mode: str = "max"
 
     # Optimizer & Loss funtions & Schedulers
 
 
-    # Encoder
-    encoder_input_dimension: int = 10
-    encoder_hidden_dimension: int = 10
-    encoder_n_layers: int = 10
-    encoder_output_dimension: int = 10
-    encoder_activation_function: str = "relu"
+    # Extractor
+    extractor_input_dimension: int = 10
+    extractor_hidden_dimension: int = 10
+    extractor_n_layers: int = 10
+    extractor_output_dimension: int = 10
+    extractor_activation_function: str = "relu"
+    extractor_p_dropout: float = 0.0
 
 
     # Classifier
@@ -36,6 +43,7 @@ class Params():
     classifier_n_layers: int = 10
     classifier_output_dimension: int = 10
     classifier_activation_function: str = "relu"
+    classifier_p_dropout: float = 0.0
 
 
     # Discriminator
@@ -44,6 +52,7 @@ class Params():
     discriminator_n_layers: int = 10
     discriminator_output_dimension: int = 10
     discriminator_activation_function: str = "relu"
+    discriminator_p_dropout: float = 0.0
 
     def get_vars_from_prefix(self, prefix: str, strip_prefix: bool = False):
         output = {}
