@@ -47,3 +47,9 @@ class EarlyStopping():
     
     def __repr__(self):
         return f"EarlyStopping(patience={self.patience}, mode={self.mode} min_delta={self.min_delta})"
+
+
+if __name__ == "__main__":
+
+    es = EarlyStopping()
+    print(es.__dict__)
