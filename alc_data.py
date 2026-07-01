@@ -34,14 +34,14 @@ class ALCData(Dataset):
 
         # Limit the number of samples we read int
         if max_samples:
-            self.audio_files[:max_samples]
-            self.label_files[:max_samples]
+            self.audio_files = self.audio_files[:max_samples]
+            self.label_files = self.label_files[:max_samples]
 
-        self.audio_stems = []
-        self.label_stems = []
-        self.files = []
-        self.files_labels = []
-        self.labels = []
+        self.audio_stems = [] # 0061006001_h_00
+        self.label_stems = [] # 0061006001_h_00
+        self.files = [] # 0061006001_h_00.wav
+        self.files_labels = [] #  0061006001_h_00_annot.json
+        self.labels = [] # 0 (NA), 1 (A)
         for (audio_file, label_file) in tzip(self.audio_files, self.label_files):
 
             # Stemming
@@ -94,7 +94,6 @@ class ALCData(Dataset):
         return torch.stack(x_list, dim=0), torch.stack(y_list, dim=0), file_list
 
 if __name__ == "__main__":
-
 
     t = time()
     data = ALCData(max_samples=500, verbose=True)
