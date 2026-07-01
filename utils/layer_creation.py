@@ -21,9 +21,17 @@ def get_activation(name: str) -> nn.Module:
     return activations[name]()
 
 
-
 def create_mlp(config) -> nn.Sequential:
+    """ Available config keys:
+    - n_layers:
+    - p_dropout
+    - input_dimension
+    - hidden_dimension
+    - output_dimension
+    - activation function
+    """
 
+    # Input validation
     if config["n_layers"] < 1:
         raise ValueError("n_layers must be >= 1")
 
@@ -32,6 +40,7 @@ def create_mlp(config) -> nn.Sequential:
 
     layers: list[nn.Module] = []
 
+    # A single layer means map input straight to output (no hidden layers and no activation function)
     if config["n_layers"] == 1:
         layers.append(
             nn.Linear(
