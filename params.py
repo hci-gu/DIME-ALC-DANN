@@ -1,13 +1,12 @@
 import os
 import json
 import torch
-
-from uuid import uuid4
 from dataclasses import dataclass, field, fields, asdict
-from utils.early_stopping import EarlyStopping
 
 @dataclass(frozen=True)
 class Params():
+
+    dev_run: bool = False # True when developing and doing quick iterations
 
     # Training params
     n_epochs: int = 30
@@ -25,7 +24,14 @@ class Params():
     early_stopping_restore_best_weights: bool = True
     early_stopping_mode: str = "max"
 
-    # Optimizer & Loss funtions & Schedulers
+    # Optimizer & Loss funtions
+    loss_fn_classifier: str = "BCEWithLogitsLoss"
+    loss_fn_discriminator: str = "CrossEntropyLoss"
+
+    # Scheduler
+    scheduler: str = "ReduceLROnPlateau"
+    scheduler_patience: int = 5
+    scheduler_mode: str = "min"
 
 
     # Extractor
