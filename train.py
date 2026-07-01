@@ -1,4 +1,5 @@
 import torch
+import mlflow
 from time import time
 from tqdm import tqdm
 from model import DANN
@@ -29,8 +30,15 @@ def train(
             x = x.to(device)
             y = y.to(device)
 
+            loss = 1
+
+            mlflow.log_metric("train_batch_loss", loss)
+
         # Validation step
         val_metrics = eval(model, val_loader)
+
+        # Log metrics
+        mlflow.log_metrics(val_metrics)
 
         # Check early stopping
         if stopping_criterion(model, val_metrics[p.optim_metric]):
@@ -45,6 +53,12 @@ def train(
     print(f"Finished training after {t_tot:.1f} minutes at epoch {1+epoch}")
 
 
-def eval():
-    pass
+@torch.no_grad()
+def eval(model: DANN, eval_loader: DataLoader, device) -> dict:
+    model.eval()
 
+    for batch_idx, (x,y) in enumerate(eval_loader):
+        x = x.to(device)
+        y = y.to(device)
+
+        loss = 1
