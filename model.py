@@ -31,7 +31,10 @@ class DANN(Module):
         
 
     def predict(self, x):
-        pass
+        x = x # batch we get from dataloader [B,1,D]
+        x_feature = self.extractor(x)
+        x_classifier = self.classifier(x_feature)
+        return x_classifier
 
 
 class Extractor(Module):
