@@ -93,12 +93,12 @@ class ALCData(Dataset):
         audio_file = self.files[index]
         audio_path = osp.join(self.AUDIO_PATH, audio_file)
         speaker_id = int(audio_file[:3])
-        label = self.class_labels[index]
+        class_label = self.class_labels[index]
         speaker_index = self.speaker_id_to_index[speaker_id]
         x = torch.tensor(self.processor.process_file(audio_path).to_numpy(), dtype=torch.float32)
         if self.transforms:
             x = self.transforms(x)
-        return x, label, speaker_index
+        return x, class_label, speaker_index
 
     def get_example_sample(self, n: int = 5):
         sample_idx = np.random.default_rng(seed=1999).choice(self.len, size=n, replace=False)
