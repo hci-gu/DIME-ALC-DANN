@@ -10,7 +10,6 @@ class Params():
 
     # Training params
     n_epochs: int = 30
-    lr: float = 0.001
     batch_size: int = 32
     n_workers: int = 1
     device: str = field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
@@ -24,7 +23,11 @@ class Params():
     early_stopping_restore_best_weights: bool = True
     early_stopping_mode: str = "max"
 
-    # Optimizer & Loss funtions
+    # Optimizer
+    optimizer_name: str = "Adam"
+    optimizer_lr: float = 0.001
+
+    # Loss funtions
     loss_fn_classifier: str = "BCEWithLogitsLoss"
     loss_fn_discriminator: str = "CrossEntropyLoss"
 
@@ -32,7 +35,6 @@ class Params():
     scheduler: str = "ReduceLROnPlateau"
     scheduler_patience: int = 5
     scheduler_mode: str = "min"
-
 
     # Extractor
     extractor_input_dimension: int = 10
@@ -60,7 +62,7 @@ class Params():
     discriminator_activation_function: str = "relu"
     discriminator_p_dropout: float = 0.0
 
-    def get_vars_from_prefix(self, prefix: str, strip_prefix: bool = False):
+    def get_vars_from_prefix(self, prefix: str, strip_prefix: bool = True):
         output = {}
 
         for f in fields(self):
@@ -82,5 +84,5 @@ if __name__ == "__main__":
     classifier_config = p.get_vars_from_prefix("classifier", strip_prefix=True)
     print(classifier_config)
 
-    with open("testconfig.json", "w") as f:
-        json.dump(asdict(p), f, indent=4)
+    # with open("testconfig.json", "w") as f:
+    #     json.dump(asdict(p), f, indent=4)
