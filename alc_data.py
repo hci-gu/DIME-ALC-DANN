@@ -9,6 +9,9 @@ from time import time
 from tqdm import tqdm
 from torch.utils.data import Dataset
 
+# TODO Data splitting must be done based on speaker, meaning a specific speaker canont be part of train and test sets
+# TODO add OpenSmile caching since it will probably take a lot of time to compute features for each batch
+
 class ALCData(Dataset):
 
     def __init__(self, data_path = None, transforms = None, max_samples: int = None, verbose: bool = False):
@@ -24,6 +27,7 @@ class ALCData(Dataset):
         self.transforms = transforms
         self.verbose = verbose
         self.max_samples = max_samples
+        self.is_data_cached = False
 
         self.prepare()
     
@@ -77,6 +81,10 @@ class ALCData(Dataset):
 
         self.class_labels = torch.tensor(self.class_labels, dtype=torch.int64)
         self.len = len(self.class_labels)
+    
+    def cache(self):
+        self.is_data_cached = True
+        pass
     
     def calculate_pos_weight(self, train_indices):
         train_labels = self.class_labels[train_indices]
