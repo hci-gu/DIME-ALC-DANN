@@ -37,27 +37,27 @@ class Params():
     scheduler_mode: str = "min"
 
     # Extractor
-    extractor_input_dimension: int = 10
-    extractor_hidden_dimension: int = 10
-    extractor_n_layers: int = 10
-    extractor_output_dimension: int = 10
+    extractor_input_dimension: int = 6373
+    extractor_hidden_dimension: int = 256
+    extractor_n_layers: int = 3
+    extractor_output_dimension: int = 256
     extractor_activation_function: str = "relu"
     extractor_p_dropout: float = 0.0
 
 
     # Classifier
-    classifier_input_dimension: int = 10
-    classifier_hidden_dimension: int = 10
-    classifier_n_layers: int = 10
-    classifier_output_dimension: int = 10
+    classifier_input_dimension: int = extractor_output_dimension
+    classifier_hidden_dimension: int = 256
+    classifier_n_layers: int = 3
+    classifier_output_dimension: int = 1
     classifier_activation_function: str = "relu"
     classifier_p_dropout: float = 0.0
 
 
     # Discriminator
-    discriminator_input_dimension: int = 10
-    discriminator_hidden_dimension: int = 10
-    discriminator_n_layers: int = 10
+    discriminator_input_dimension: int = extractor_output_dimension
+    discriminator_hidden_dimension: int = 256
+    discriminator_n_layers: int = 3
     discriminator_output_dimension: int = 10
     discriminator_activation_function: str = "relu"
     discriminator_p_dropout: float = 0.0
