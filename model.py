@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from params import Params
-from torch.nn import Module
+from torch.nn import Module, functional
 from torchsummary import summary
 from utils.gradient_reversal import ReverseLayerF
 from utils.layer_creation import create_mlp
@@ -13,28 +13,32 @@ class DANN(Module):
     def __init__(self, p: Params):
         super().__init__()
 
-        self.extractor = Extractor(p.get_vars_from_prefix("extractor", strip_prefix=True))
-
-        self.classifier = Classifier(p.get_vars_from_prefix("classifier", strip_prefix=True))
-
-        self.gradient_reversal = ReverseLayerF()
-
-        self.discriminator = Discriminator(p.get_vars_from_prefix("discriminator", strip_prefix=True))
+        self.extractor = Extractor(p.get_vars_from_prefix("extractor"))
+        self.classifier = Classifier(p.get_vars_from_prefix("classifier"))
+        self.discriminator = Discriminator(p.get_vars_from_prefix("discriminator"))
     
-    def forward(self, x):
+    def forward(self, x, alpha: float = 1.0):
         x = x # batch we get from dataloader [B,1,D]
+
+        # Extractor
         x_feature = self.extractor(x)
-        x_classifier = self.classifier(x_feature)
-        x_discriminator = self.discriminator(x_feature)
 
-        return x_classifier, x_discriminator
+        # Classifier
+        class_logits = self.classifier(x_feature)
+
+        # Discriminator
+        reversed_feature = ReverseLayerF.apply(x_feature, alpha)
+        speaker_logits = self.discriminator(reversed_feature)
+
+        return class_logits, speaker_logits
         
-
+    @torch.no_grad()
     def predict(self, x):
         x = x # batch we get from dataloader [B,1,D]
         x_feature = self.extractor(x)
-        x_classifier = self.classifier(x_feature)
-        return x_classifier
+        logit = self.classifier(x_feature)
+        p_intoxicated = functional.sigmoid(logit) # p(intoxicated|x) = "probability this person is intoxicated"
+        return p_intoxicated
 
 
 class Extractor(Module):
@@ -75,5 +79,6 @@ if __name__ == "__main__":
     
     p = Params()
     dann = DANN(p)
-    example_input = torch.randn((5,1,10))
+    n_features = 6373
+    example_input = torch.randn((5,1,n_features))
     summary(dann, example_input, batch_dim=None)
