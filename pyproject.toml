@@ -13,7 +13,9 @@ dependencies = [
     "opensmile>=2.6.0",
     "praat-parselmouth>=0.4.7",
     "scipy>=1.18.0",
+    "tensorboard>=2.21.0",
     "torch-summary>=1.4.5",
+    "torch-tb-profiler>=0.4.3",
     "torchaudio>=2.11.0",
     "tqdm>=4.68.3",
 ]
