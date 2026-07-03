@@ -3,7 +3,7 @@ import json
 import torch
 from dataclasses import dataclass, field, fields, asdict
 
-@dataclass(frozen=True)
+@dataclass()
 class Params():
 
     dev_run: bool = False # True when developing and doing quick iterations
@@ -21,13 +21,14 @@ class Params():
     early_stopping_patience: int | None = 10
     early_stopping_min_delta: float = 0.0 
     early_stopping_restore_best_weights: bool = True
-    early_stopping_mode: str = "max"
+    early_stopping_mode: str = "min"
 
     # Optimizer
-    optimizer_name: str = "Adam"
+    optimizer: str = "Adam"
     optimizer_lr: float = 0.001
 
     # Loss funtions
+    use_pos_weight: bool = True
     loss_fn_classifier: str = "BCEWithLogitsLoss"
     loss_fn_discriminator: str = "CrossEntropyLoss"
 
@@ -68,7 +69,7 @@ class Params():
         for f in fields(self):
             name = f.name
 
-            if name.startswith(prefix):
+            if name.startswith(prefix + "_"):
                 value = getattr(self, name)
 
                 if strip_prefix:
