@@ -22,3 +22,14 @@ Create a temporary port forward on your local machine
 ``` bash
 ssh -L 5000:127.0.0.1:5000 user@REMOTE_HOSTNAME
 ```
+
+## Tensorboard
+Start tensorboard server on remote machine
+```
+uv run tensorboard --logdir profiling\tensorboard
+```
+
+Create a temporary port forward on your local machine
+``` bash
+ssh -L 5000:127.0.0.1:5000 user@REMOTE_HOSTNAME
+```
