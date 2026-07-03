@@ -39,7 +39,8 @@ def train(
         # Train pass
         model.train()
         train_loss = 0.0
-        for batch_idx, (x,y,s) in enumerate(tqdm(train_loader, desc="[Step]", position=1, leave=False)):
+        for batch_idx, (x,y,s) in enumerate(tqdm(train_loader, desc="[Batch]", position=1, leave=False)):
+            if p.dev_run and batch_idx > 3: break
             t_batch_start = time()
             x = x.to(device)
             y = y.to(device, dtype=torch.float32) # class label (intoxicated vs sober)
