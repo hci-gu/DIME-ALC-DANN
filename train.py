@@ -22,7 +22,7 @@ def train(
     val_loader: DataLoader
     ):
 
-    stopping_criterion = EarlyStopping(p.get_vars_from_prefix("early_stopping"))
+    stopping_criterion = EarlyStopping(**p.get_vars_from_prefix("early_stopping"))
     scheduler = ReduceLROnPlateau(optimizer=optimizer, **p.get_vars_from_prefix("scheduler"))
     device = torch.device(p.device)
     classifier_loss_fn, discriminator_loss_fn = loss_functions # Unpack loss functions
@@ -30,14 +30,16 @@ def train(
 
     print(f"Started training with device: {p.device}")
     t_start = time()
-    for epoch in tqdm(range(p.n_epochs)):
+    train_pbar = tqdm(range(p.n_epochs), desc="Training", position=0)
+    for epoch in train_pbar:
 
         alpha = alpha_schedule(epoch, p.n_epochs)
         mlflow.log_metric("alpha",alpha, step=epoch)
 
         # Train pass
         model.train()
-        for batch_idx, (x,y,s) in enumerate(train_loader):
+        train_loss = 0.0
+        for batch_idx, (x,y,s) in enumerate(tqdm(train_loader, desc="[Step]", position=1, leave=False)):
             t_batch_start = time()
             x = x.to(device)
             y = y.to(device, dtype=torch.float32) # class label (intoxicated vs sober)
@@ -49,6 +51,7 @@ def train(
             discriminator_loss = discriminator_loss_fn(speaker_logits, s)
 
             loss = classifier_loss + discriminator_loss
+            train_loss += loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -63,6 +66,7 @@ def train(
                 "train_batch_loss": loss.item()
             }, step=global_step
             )
+        train_loss = train_loss / len(train_loader)
 
         # Validation step
         val_metrics = evaluate(model, p, loss_functions, val_loader, device)
@@ -73,11 +77,15 @@ def train(
         # LR Scheduler
         scheduler.step(val_metrics[p.optim_metric])
 
+        # Update tqdm bar
+        train_pbar.set_description_str(f"Training L_tr={train_loss:.4f}|L_val={val_metrics["loss"]:.4f}")
+
         # Check early stopping
         if stopping_criterion(model, val_metrics[p.optim_metric]):
             break
     
 
+    stopping_criterion.load_best_model(model)
     t_tot = (time() - t_start) / 60.0
     print(f"Finished training after {t_tot:.1f} minutes at epoch {1+epoch}")
     mlflow.log_metric("training_time", t_tot)
@@ -91,7 +99,7 @@ def evaluate(model: DANN, p:Params, loss_functions, eval_loader: DataLoader, dev
 
     total_classifier_loss = 0.0
     total_discriminator_loss = 0.0
-    for (x,y,s) in eval_loader:
+    for (x,y,s) in tqdm(eval_loader, desc="[Validation]", position=1, leave=False):
         x = x.to(device)
         y = y.to(device, dtype=torch.float32) # class label (intoxicated vs sober)
         s = s.to(device, dtype=torch.long) # speaker ID 
