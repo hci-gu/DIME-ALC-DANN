@@ -8,7 +8,7 @@ from params import Params
 from alc_data import ALCData
 from dataclasses import asdict
 from train import train, evaluate
-from torch.utils.data import random_split, DataLoader
+from torch.utils.data import DataLoader, Subset
 
 def main():
 
@@ -28,12 +28,15 @@ def main():
 
     # Load data
     print(f"Loading data...")
-    data = ALCData(max_samples=max_samples)
-    generator = torch.Generator().manual_seed(SEED)
-    train_data, val_data, test_data = random_split(data, [0.8,0.1,0.1], generator=generator)
-    pos_weight = data.calculate_pos_weight(train_data.indices).to(device) if p.use_pos_weight else None
-
+    data = ALCData(max_samples=max_samples, seed=SEED)
+    train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.8, val_frac=0.1, test_frac=0.1)
+    pos_weight = data.calculate_pos_weight(train_indices=train_indices).to(device) if p.use_pos_weight else None
     p.discriminator_output_dimension = len(data.speaker_id_to_index) # n_speakers
+
+    # Train/Val/Test splitting
+    train_data = Subset(data, train_indices)
+    val_data = Subset(data, val_indices)
+    test_data = Subset(data, test_indices)
 
     # DataLoaders
     train_loader = DataLoader(train_data, p.batch_size, shuffle=True, num_workers=p.n_workers, pin_memory=p.pin_memory)
@@ -55,7 +58,11 @@ def main():
 
     with mlflow.start_run():
 
+        # Log parameters
         mlflow.log_params(asdict(p))
+
+        # Log data metadata
+        mlflow.log_dict(data.get_split_speakers(),"speaker_data_split.json")
 
         # Start training
         train(
