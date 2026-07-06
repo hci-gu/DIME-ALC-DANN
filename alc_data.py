@@ -21,6 +21,7 @@ class ALCData(Dataset):
         seed: int = 1999,
         verbose: bool = False):
         super().__init__()
+
         self.ROOT = data_path if data_path else osp.join("data","ALC")
         self.AUDIO_PATH = osp.join(self.ROOT,"wav","h")
         self.LABELS_PATH = osp.join(self.ROOT,"labels","h")
@@ -93,6 +94,9 @@ class ALCData(Dataset):
                 self.speaker_ids.append(speaker_id) # list of the speaker ids
                 if speaker_id not in self.speaker_id_to_index:
                     self.speaker_id_to_index[speaker_id] = len(self.speaker_id_to_index)
+
+        if self.verbose:
+            print(f"Number of data samples used for training & testing: {len(self.class_labels)}")
 
         self.class_labels = torch.tensor(self.class_labels, dtype=torch.int64)
         self.len = len(self.class_labels)

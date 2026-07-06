@@ -10,12 +10,15 @@ from dataclasses import asdict
 from train import train, evaluate
 from torch.utils.data import DataLoader, Subset
 
+# TODO add argparse logic
+
 def main():
 
     # User parameters
     dev_run = True
     save_model = True
-    max_samples = 500 if dev_run else None
+    max_samples = 1000 if dev_run else None
+    verbose = dev_run
     SEED = 1999
 
     # Mlflow tracking
@@ -28,7 +31,7 @@ def main():
 
     # Load data
     print(f"Loading data...")
-    data = ALCData(max_samples=max_samples, seed=SEED)
+    data = ALCData(max_samples=max_samples, cache_features=True, seed=SEED, verbose=verbose)
     train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.8, val_frac=0.1, test_frac=0.1)
     pos_weight = data.calculate_pos_weight(train_indices=train_indices).to(device) if p.use_pos_weight else None
     p.discriminator_output_dimension = len(data.speaker_id_to_index) # n_speakers
