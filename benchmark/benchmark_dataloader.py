@@ -40,7 +40,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-workers", type=parse_int_list, default=parse_int_list("0,1,2,4,8,12,16"))
     parser.add_argument("--pin-memory", type=parse_bool_list, default=parse_bool_list("false,true"))
     parser.add_argument("--warmup-steps", type=int, default=3)
-    parser.add_argument("--sample-steps", type=int, default=20)
+    parser.add_argument("--sample-steps", type=int, default=16)
     parser.add_argument("--seed", type=int, default=1999)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--include-transfer", action="store_true")
