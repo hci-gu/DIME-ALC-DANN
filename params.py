@@ -63,6 +63,16 @@ class Params():
     discriminator_activation_function: str = "relu"
     discriminator_p_dropout: float = 0.0
 
+    @classmethod
+    def from_optional_overrides(cls, **overrides):
+        field_names = {f.name for f in fields(cls)}
+        params_overrides = {
+            name: value
+            for name, value in overrides.items()
+            if name in field_names and value is not None
+        }
+        return cls(**params_overrides)
+
     def get_vars_from_prefix(self, prefix: str, strip_prefix: bool = True):
         output = {}
 

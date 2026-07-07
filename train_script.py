@@ -8,30 +8,36 @@ from params import Params
 from alc_data import ALCData
 from dataclasses import asdict
 from train import train, evaluate
+from utils.argument_parsing import parse_args
 from torch.utils.data import DataLoader, Subset
 
-# TODO add argparse logic
 
 def main():
 
+    # CLI args
+    args = parse_args()
+
     # User parameters
-    dev_run = True
     save_model = True
-    max_samples = 1000 if dev_run else None
-    verbose = dev_run
+    p = Params.from_optional_overrides(**vars(args))
+    max_samples = args.max_samples if args.max_samples is not None else (1000 if p.dev_run else None)
+    verbose = args.verbose
     SEED = 1999
 
     # Mlflow tracking
     mlflow.set_experiment("DANN")
     print(f"Using MLflow Tracking URI: {mlflow.get_tracking_uri()}")
 
-    # Parameters
-    p = Params(dev_run=dev_run)
     device = torch.device(p.device)
 
     # Load data
     print(f"Loading data...")
-    data = ALCData(max_samples=max_samples, cache_features=True, seed=SEED, verbose=verbose)
+    data = ALCData(
+        max_samples=max_samples,
+        cache_features=args.cache_features,
+        seed=SEED,
+        verbose=verbose
+    )
     train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.8, val_frac=0.1, test_frac=0.1)
     pos_weight = data.calculate_pos_weight(train_indices=train_indices).to(device) if p.use_pos_weight else None
     p.discriminator_output_dimension = len(data.speaker_id_to_index) # n_speakers
