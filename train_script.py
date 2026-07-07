@@ -3,7 +3,6 @@ import mlflow
 import torch.nn as nn
 
 from model import DANN
-from torch import optim
 from params import Params
 from alc_data import ALCData
 from dataclasses import asdict
@@ -18,14 +17,14 @@ def main():
     args = parse_args()
 
     # User parameters
-    save_model = True
+    save_model = args.save_model
     p = Params.from_optional_overrides(**vars(args))
-    max_samples = args.max_samples if args.max_samples is not None else (1000 if p.dev_run else None)
+    max_samples = args.max_samples if (args.max_samples is not None) else (1000 if p.dev_run else None)
     verbose = args.verbose
     SEED = 1999
 
     # Mlflow tracking
-    mlflow.set_experiment("DANN")
+    mlflow.set_experiment("DANN"+ " - DEV" if p.dev_run else "")
     print(f"Using MLflow Tracking URI: {mlflow.get_tracking_uri()}")
 
     device = torch.device(p.device)

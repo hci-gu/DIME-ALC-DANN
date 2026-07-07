@@ -9,7 +9,7 @@ class Params():
     dev_run: bool = False # True when developing and doing quick iterations
 
     # Training params
-    n_epochs: int = 30
+    n_epochs: int = 50
     batch_size: int = 128
     n_workers: int = 1
     device: str = field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
