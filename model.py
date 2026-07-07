@@ -3,6 +3,7 @@ import torch.nn as nn
 
 from torch import Tensor
 from params import Params
+from typing import Literal
 from torch.nn import Module, functional
 from torchsummary import summary
 from utils.gradient_reversal import ReverseLayerF
@@ -35,12 +36,13 @@ class DANN(Module):
         return class_logits, speaker_logits
         
     @torch.no_grad()
-    def predict(self, x: Tensor) -> Tensor:
-        x = x.squeeze(1) # batch we get from dataloader [B,1,D]
+    def predict(self, x: Tensor, return_type: Literal["probability","logits"] = "logits") -> Tensor:
+        x = x.squeeze(1) # batch we get from dataloader [B,1,D] -> [B,d_input]
         x_feature = self.extractor(x)
-        logit = self.classifier(x_feature)
-        p_intoxicated = functional.sigmoid(logit) # p(intoxicated|x) = "probability this person is intoxicated"
-        return p_intoxicated
+        output = self.classifier(x_feature) # logit for positive class \in (-inf,inf)
+        if return_type == "probability":
+            return functional.sigmoid(output) # p(intoxicated|x) = "probability this person is intoxicated"
+        return output
 
 
 class Extractor(Module):

@@ -94,24 +94,47 @@ def train(
     mlflow.log_metric("training_time", t_tot)
 
 
-# TODO add more classifier metrics here
 @torch.no_grad()
 def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader, device, eval_type: Literal["val","test"] = "val") -> dict:
     model.eval()
 
     total_classifier_loss = 0.0
+    n_correct = 0
+    fp, fn, tp, tn = 0, 0, 0, 0
     for (x,y,_) in tqdm(eval_loader, desc="[Validation]", position=1, leave=False):
         x = x.to(device)
-        y = y.to(device, dtype=torch.float32) # class label (intoxicated vs sober)
+        y = y.to(device) # class label (intoxicated vs sober)
 
-        class_logits, _ = model(x, alpha=1.0)
+        class_logits = model.predict(x)
+        y = y.bool()
+        pred = class_logits.squeeze(-1) > 0
 
-        total_classifier_loss += classifier_loss_fn(class_logits.squeeze(-1), y)
+        # Loss
+        total_classifier_loss += classifier_loss_fn(class_logits.squeeze(-1), y.to(torch.float32)).item()
 
+        # Accuracy, P, R, F1
+        n_correct += (pred == y).sum().item()
+        tp += (pred & y).sum().item()
+        tn += (~pred & ~y).sum().item()
+        fp += (pred & ~y).sum().item()
+        fn += (~pred & y).sum().item()
+
+    accuracy = n_correct/len(eval_loader.dataset)
+    precision = tp / (tp + fp) if (tp + fp > 0) else 0.0
+    recall = tp / (tp + fn) if (tp + fn > 0) else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall > 0) else 0.0
     total_classifier_loss = total_classifier_loss / len(eval_loader)
 
     metrics =  {
-        "classifier_loss": total_classifier_loss.item(),
+        "classifier_loss": total_classifier_loss,
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "tp": tp,
+        "tn": tn,
+        "fp": fp,
+        "fn": fn,
     }
     return {f"{eval_type}_{key}": value for (key,value) in metrics.items()}
 
