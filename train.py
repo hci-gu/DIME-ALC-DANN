@@ -44,7 +44,8 @@ def train(
             t_batch_start = time()
             x = x.to(device)
             y = y.to(device, dtype=torch.float32) # class label (intoxicated vs sober)
-            s = s.to(device, dtype=torch.long) # speaker ID 
+            s = s.to(device, dtype=torch.long) # speaker local index
+            assert s >= 0, f"Detected negative speaker_id, training must use a training subset"
 
             class_logits, speaker_logits = model(x, alpha=alpha)
 
@@ -52,7 +53,7 @@ def train(
             discriminator_loss = discriminator_loss_fn(speaker_logits, s)
 
             loss = classifier_loss + discriminator_loss
-            train_loss += loss
+            train_loss += loss.item()
 
             optimizer.zero_grad()
             loss.backward()
@@ -70,7 +71,7 @@ def train(
         train_loss = train_loss / len(train_loader)
 
         # Validation step
-        val_metrics = evaluate(model, p, loss_functions, val_loader, device)
+        val_metrics = evaluate(model, p, classifier_loss_fn, val_loader, device)
 
         # Log metrics
         mlflow.log_metrics(val_metrics, step=epoch)
@@ -79,7 +80,7 @@ def train(
         scheduler.step(val_metrics[p.optim_metric])
 
         # Update tqdm bar
-        train_pbar.set_description_str(f"Training L_tr={train_loss:.4f}|L_val={val_metrics["loss"]:.4f}")
+        train_pbar.set_description_str(f"Training L_tr={train_loss:.4f}|L_val={val_metrics["classifier_loss"]:.4f}")
 
         # Check early stopping
         if stopping_criterion(model, val_metrics[p.optim_metric]):
@@ -92,30 +93,23 @@ def train(
     mlflow.log_metric("training_time", t_tot)
 
 
+# TODO add more classifier metrics here
 @torch.no_grad()
-def evaluate(model: DANN, p:Params, loss_functions, eval_loader: DataLoader, device) -> dict:
+def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader, device) -> dict:
     model.eval()
 
-    classifier_loss_fn, discriminator_loss_fn = loss_functions
-
     total_classifier_loss = 0.0
-    total_discriminator_loss = 0.0
-    for (x,y,s) in tqdm(eval_loader, desc="[Validation]", position=1, leave=False):
+    for (x,y,_) in tqdm(eval_loader, desc="[Validation]", position=1, leave=False):
         x = x.to(device)
         y = y.to(device, dtype=torch.float32) # class label (intoxicated vs sober)
-        s = s.to(device, dtype=torch.long) # speaker ID 
 
-        class_logits, speaker_logits = model(x, alpha=1.0)
+        class_logits, _ = model(x, alpha=1.0)
 
         total_classifier_loss += classifier_loss_fn(class_logits.squeeze(-1), y)
-        total_discriminator_loss += discriminator_loss_fn(speaker_logits, s)
 
     total_classifier_loss = total_classifier_loss / len(eval_loader)
-    total_discriminator_loss = total_discriminator_loss / len(eval_loader)
 
     return {
         "classifier_loss": total_classifier_loss.item(),
-        "discriminator_loss": total_discriminator_loss.item(),
-        "loss": (total_classifier_loss + total_discriminator_loss).item()
     }
 

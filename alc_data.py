@@ -7,7 +7,7 @@ import os.path as osp
 
 from time import time
 from tqdm import tqdm
-from torch.utils.data import Dataset, Subset
+from torch.utils.data import Dataset, Subset, DataLoader
 
 
 class ALCData(Dataset):
@@ -36,6 +36,7 @@ class ALCData(Dataset):
         self.is_cached = False
         self.seed = seed
         self.is_split = False
+        self.train_speaker_mapping = {}
 
         self.prepare()
         if cache_features:
@@ -178,6 +179,9 @@ class ALCData(Dataset):
         self.train_speakers_id = set(unique_speakers[:n_train].tolist())
         self.val_speakers_id = set(unique_speakers[n_train:(n_train+n_val)].tolist())
         self.test_speakers_id = set(unique_speakers[(n_train+n_val):].tolist())
+
+        # Use for training to map speaker_id -> local_idx \in {0,1,...,len(train_speakers_id)-1} for CE-loss calculation
+        self.train_speaker_mapping = {speaker_idx: local_idx for (local_idx,speaker_idx) in enumerate(sorted(self.train_speakers_id))}
         
         train_indices = []
         val_indices = []
@@ -212,7 +216,11 @@ class ALCData(Dataset):
         audio_path = osp.join(self.AUDIO_PATH, audio_file)
         speaker_id = int(audio_file[:3])
         class_label = self.class_labels[index]
-        speaker_index = self.speaker_id_to_index[speaker_id]
+
+        if speaker_id in self.train_speaker_mapping: # This is a train sample
+            local_index = self.train_speaker_mapping[speaker_id]
+        else: # Val or test sample
+            local_index = -1
 
         if self.is_cached:
             x = self.cache_dict[audio_file]
@@ -221,7 +229,7 @@ class ALCData(Dataset):
 
         if self.transforms:
             x = self.transforms(x)
-        return x, class_label, speaker_index
+        return x, class_label, local_index
 
     def get_example_sample(self, n: int = 5):
         sample_idx = np.random.default_rng(seed=self.seed).choice(self.len, size=n, replace=False)
@@ -239,26 +247,24 @@ class ALCData(Dataset):
 
 if __name__ == "__main__":
 
+    print(f"Loading data...")
     t = time()
-    data = ALCData(max_samples=None, verbose=True, cache_features=False)
+    data = ALCData(
+        max_samples=None,
+        cache_features=False,
+        verbose=True,
+    )
     t_tot = time() - t
     print(f"Total time to setup dataset: {t_tot:.2f} s")
-    print(f"Number of data samples:{len(data)}")
+    print(f"Number of data samples: {len(data)}")
 
-    # Split data
-    train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.8,val_frac=0.1,test_frac=0.1)
-    print(len(train_indices),train_indices[:10])
-    print(len(val_indices),val_indices[:10])
-    print(len(test_indices),test_indices[:10])
+    # Train/Val/Test splitting
+    train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.8, val_frac=0.1, test_frac=0.1)
     train_data = Subset(data, train_indices)
-    val_data = Subset(data, val_indices)
-    test_data = Subset(data, test_indices)
 
     # Get 5 random sample
-    x, y, s, files = data.get_example_sample(5)
+    x, y, s, files = train_data.dataset.get_example_sample(5)
     print("x-shape:",x.shape," y-shape",y.shape," s-shape",s.shape)
     print("Class labels:",y)
-    print("Speaker IDs",s)
+    print("Local Speaker Index",s)
     print("Files:",files)
-
-
