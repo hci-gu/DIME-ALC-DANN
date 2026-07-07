@@ -45,7 +45,7 @@ def train(
             x = x.to(device)
             y = y.to(device, dtype=torch.float32) # class label (intoxicated vs sober)
             s = s.to(device, dtype=torch.long) # speaker local index
-            assert s >= 0, f"Detected negative speaker_id, training must use a training subset"
+            assert (s >= 0).all(), f"Detected negative speaker_id, training must use a training subset"
 
             class_logits, speaker_logits = model(x, alpha=alpha)
 
