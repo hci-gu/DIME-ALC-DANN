@@ -25,7 +25,9 @@ def main():
     SEED = 1999
 
     # Mlflow tracking
-    mlflow.set_experiment("DANN"+ " - DEV" if p.dev_run else "")
+    experiment_name = "DANN" + (" (DEV)" if p.dev_run else "")
+    print(f"Starting Experiment: {experiment_name}")
+    mlflow.set_experiment(experiment_name)
     print(f"Using MLflow Tracking URI: {mlflow.get_tracking_uri()}")
 
     device = torch.device(p.device)
