@@ -1,3 +1,4 @@
+import os
 import torch
 import mlflow
 import torch.nn as nn
@@ -89,7 +90,10 @@ def main():
         # Save model & optimizer
         if save_model:
             model.to("cpu")
-            torch.save(model, "dann_model.pth")
+            run_name = mlflow.active_run().data.tags["mlflow.runName"].replace(" ", "_").replace("/", "_").replace("\\", "_")
+            save_path = os.path.join("weights",f"dann_model-{run_name}.pth")
+            torch.save(model, save_path)
+            print(f"Saved model to: {save_path}")
         
 
 if __name__ == "__main__":
