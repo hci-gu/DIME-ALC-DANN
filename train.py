@@ -81,7 +81,7 @@ def train(
         scheduler.step(val_metrics[p.optim_metric])
 
         # Update tqdm bar
-        train_pbar.set_description_str(f"Training L_tr={train_loss:.4f}|L_val={val_metrics["classifier_loss"]:.4f}")
+        train_pbar.set_description_str(f"Training L_tr={train_loss:.4f}|L_val={val_metrics["val_classifier_loss"]:.4f}")
 
         # Check early stopping
         if stopping_criterion(model, val_metrics[p.optim_metric]):
