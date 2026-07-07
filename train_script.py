@@ -89,7 +89,7 @@ def main():
         )
 
         # Run evaluation
-        test_metrics = evaluate(model, p, classifier_loss_fn, test_loader, device)
+        test_metrics = evaluate(model, p, classifier_loss_fn, test_loader, device, eval_type="test")
         mlflow.log_metrics(test_metrics)
 
         # Save model & optimizer

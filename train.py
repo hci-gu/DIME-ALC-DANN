@@ -7,6 +7,7 @@ from tqdm import tqdm
 from model import DANN
 from torch import optim
 from params import Params
+from typing import Literal
 from torch.utils.data import DataLoader
 from utils.early_stopping import EarlyStopping
 from utils.compute_params import alpha_schedule
@@ -95,7 +96,7 @@ def train(
 
 # TODO add more classifier metrics here
 @torch.no_grad()
-def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader, device) -> dict:
+def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader, device, eval_type: Literal["val","test"] = "val") -> dict:
     model.eval()
 
     total_classifier_loss = 0.0
@@ -109,7 +110,8 @@ def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader,
 
     total_classifier_loss = total_classifier_loss / len(eval_loader)
 
-    return {
+    metrics =  {
         "classifier_loss": total_classifier_loss.item(),
     }
+    return {f"{eval_type}_{key}": value for (key,value) in metrics.items()}
 
