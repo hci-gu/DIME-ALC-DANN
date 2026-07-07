@@ -34,7 +34,6 @@ class ALCData(Dataset):
         self.verbose = verbose
         self.max_samples = max_samples
         self.is_cached = False
-        self.cache_matrix = None
         self.seed = seed
         self.is_split = False
 
@@ -101,16 +100,50 @@ class ALCData(Dataset):
         self.class_labels = torch.tensor(self.class_labels, dtype=torch.int64)
         self.len = len(self.class_labels)
     
+
     def cache(self):
+
+        # Look in .cache and see if the data is stored load and return
+        os.makedirs(".cache", exist_ok=True)
+        cache_path = osp.join(".cache","opensmile-features.pt")
+        if osp.exists(cache_path):
+
+            if self.verbose: print(f"Loading pre-processed audio features from cache: {cache_path}")
+
+            # Load from disk
+            all_features = torch.load(cache_path, map_location="cpu")
+
+            # Check for missing files
+            missing_files = [audio_file for audio_file in self.files if audio_file not in all_features]
+            if missing_files:
+                raise FileNotFoundError(
+                    f"Could not find cached tensor for {len(missing_files)} files. "
+                    f"First missing file: {missing_files[0]}"
+                )
+
+            # Filter our files
+            self.cache_dict = {
+                audio_file: all_features[audio_file]
+                for audio_file in self.files
+            }
+
+            self.is_cached = True
+            del all_features
+            return
+
         if self.verbose: print(f"Calculating and caching audio preprocessing")
-        for idx in tqdm(range(self.len)):
-            audio_file = self.files[idx]
+        self.cache_dict = {}
+        for audio_file in tqdm(self.files):
             audio_path = osp.join(self.AUDIO_PATH, audio_file)
             x = torch.tensor(self.processor.process_file(audio_path).to_numpy(), dtype=torch.float32).squeeze(0)
-            if self.cache_matrix is None:
-                self.cache_matrix = torch.zeros((self.len,len(x)), dtype=torch.float32)
-            self.cache_matrix[idx,:] = x
+            self.cache_dict[audio_file] = x
         self.is_cached = True
+
+        # If file does not exist save to disk for future
+        if self.max_samples is None:
+            torch.save(self.cache_dict, cache_path)
+        elif self.verbose:
+            print("Skipping persistent feature cache because max_samples is set")
     
     def calculate_pos_weight(self, train_indices):
         train_labels = self.class_labels[train_indices]
@@ -182,7 +215,7 @@ class ALCData(Dataset):
         speaker_index = self.speaker_id_to_index[speaker_id]
 
         if self.is_cached:
-            x = self.cache_matrix[index,:]
+            x = self.cache_dict[audio_file]
         else:
             x = torch.tensor(self.processor.process_file(audio_path).to_numpy(), dtype=torch.float32).squeeze(0)
 
