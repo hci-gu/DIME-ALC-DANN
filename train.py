@@ -121,11 +121,11 @@ def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader,
         # Loss
         total_classifier_loss += classifier_loss_fn(class_logits.squeeze(-1), y.to(torch.float32)).item()
 
-        y_true.append(y.cpu())
-        y_probas.append(y_prob.cpu())
+        y_true.append(y.cpu().numpy())
+        y_probas.append(y_prob.cpu().numpy())
     total_classifier_loss = total_classifier_loss / len(eval_loader)
-    y_true = np.array(y_true)
-    y_probas = np.array(y_probas)
+    y_true = np.concatenate(y_true)
+    y_probas = np.concatenate(y_probas)
 
     # Threshold probabilities to get vector
     y_pred = (y_probas > 0.5)
