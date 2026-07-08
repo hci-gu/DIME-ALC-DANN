@@ -88,7 +88,7 @@ def main():
             val_loader=val_loader
         )
 
-        # Run evaluation
+        # Run test evaluation
         test_metrics = evaluate(model, p, classifier_loss_fn, test_loader, device, eval_type="test")
         mlflow.log_metrics(test_metrics)
 

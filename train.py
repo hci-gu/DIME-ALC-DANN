@@ -1,23 +1,25 @@
 import torch
 import mlflow
-import torch.nn as nn
 import matplotlib
-matplotlib.use("Agg")
+import numpy as np
+import torch.nn as nn
 import matplotlib.pyplot as plt
 
-from io import BytesIO
 from time import time
 from tqdm import tqdm
+from PIL import Image
+from io import BytesIO
 from model import DANN
-from torch import optim
 from params import Params
 from typing import Literal
-from PIL import Image
+from torch import optim, Tensor
 from torch.utils.data import DataLoader
 from utils.early_stopping import EarlyStopping
 from utils.compute_params import alpha_schedule
-from sklearn.metrics import auc, roc_auc_score, roc_curve, precision_recall_curve
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from sklearn.metrics import auc, roc_auc_score, roc_curve, precision_recall_curve
+
+matplotlib.use("Agg")
 
 
 def train(
@@ -107,49 +109,56 @@ def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader,
     total_classifier_loss = 0.0
     n_correct = 0
     fp, fn, tp, tn = 0, 0, 0, 0
-    y_true, y_score = [], []
+    y_true, y_probas = [], []
     for (x,y,_) in tqdm(eval_loader, desc="[Validation]", position=1, leave=False):
-        x = x.to(device)
+        x: Tensor = x.to(device) # [B,d_input]
         y = y.to(device) # class label (intoxicated vs sober)
 
         class_logits = model.predict(x)
         y_prob = torch.sigmoid(class_logits.squeeze(-1))
         y = y.bool()
-        pred = y_prob > 0.5
 
         # Loss
         total_classifier_loss += classifier_loss_fn(class_logits.squeeze(-1), y.to(torch.float32)).item()
 
-        # Accuracy, P, R, F1
-        n_correct += (pred == y).sum().item()
-        tp += (pred & y).sum().item()
-        tn += (~pred & ~y).sum().item()
-        fp += (pred & ~y).sum().item()
-        fn += (~pred & y).sum().item()
         y_true.append(y.cpu())
-        y_score.append(y_prob.cpu())
+        y_probas.append(y_prob.cpu())
+    total_classifier_loss = total_classifier_loss / len(eval_loader)
+    y_true = np.array(y_true)
+    y_probas = np.array(y_probas)
 
+    # Threshold probabilities to get vector
+    y_pred = (y_probas > 0.5)
+    
+    # Confusion matrix elements
+    tp = (y_pred & y_true).sum()
+    tn = (~y_pred & ~y_true).sum()
+    fp = (y_pred & ~y_true).sum()
+    fn = (~y_pred & y_true).sum()
+
+    # Accuracy, P, R, Specificity, F1
+    n_correct = (y_pred == y_true).sum()
     accuracy = n_correct/len(eval_loader.dataset)
     precision = tp / (tp + fp) if (tp + fp > 0) else 0.0
     recall = tp / (tp + fn) if (tp + fn > 0) else 0.0
     specificity = tn / (tn + fp) if (tn + fp > 0) else 0.0
     balanced_accuracy = (recall + specificity) / 2
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall > 0) else 0.0
-    total_classifier_loss = total_classifier_loss / len(eval_loader)
 
-    y_true = torch.cat(y_true).numpy()
-    y_score = torch.cat(y_score).numpy()
     has_both_classes = len(set(y_true.tolist())) == 2
-    auroc = roc_auc_score(y_true, y_score) if has_both_classes else 0.0
+    auroc = roc_auc_score(y_true, y_probas) if has_both_classes else 0.0
 
-    pr_precision, pr_recall, pr_thresholds = precision_recall_curve(y_true, y_score)
+    # Precision-Recall Curve
+    pr_precision, pr_recall, pr_thresholds = precision_recall_curve(y_true, y_probas)
     pr_f1 = 2 * pr_precision[:-1] * pr_recall[:-1] / (pr_precision[:-1] + pr_recall[:-1] + 1e-12)
+    best_f1 = pr_f1.max()
     best_threshold = round(float(pr_thresholds[pr_f1.argmax()]), 4) if len(pr_thresholds) else 0.5
 
-    if epoch is not None:
+    # Log figures every 5th epoch or on test set
+    if (epoch % 5 == 0) or (eval_type == "test"):
         _log_classifier_curves(
             y_true=y_true,
-            y_score=y_score,
+            y_probas=y_probas,
             pr_precision=pr_precision,
             pr_recall=pr_recall,
             auroc=auroc,
@@ -158,6 +167,8 @@ def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader,
             epoch=epoch,
         )
 
+    
+    # Dictionary containing the metrics
     metrics =  {
         "classifier_loss": total_classifier_loss,
         "accuracy": accuracy,
@@ -167,6 +178,7 @@ def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader,
         "auroc": auroc,
         "balanced_accuracy": balanced_accuracy,
         "specificity": specificity,
+        "best_f1": best_f1,
         "best_threshold": best_threshold,
         "tp": tp,
         "tn": tn,
@@ -176,9 +188,12 @@ def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader,
     return {f"{eval_type}_{key}": value for (key,value) in metrics.items()}
 
 
+
+### HELPER FUNCTIONS ### 
+
 def _log_classifier_curves(
     y_true,
-    y_score,
+    y_probas,
     pr_precision,
     pr_recall,
     auroc: float,
@@ -200,7 +215,7 @@ def _log_classifier_curves(
 
     roc_fig, roc_ax = plt.subplots(figsize=(5, 4), dpi=120)
     if has_both_classes:
-        fpr, tpr, _ = roc_curve(y_true, y_score)
+        fpr, tpr, _ = roc_curve(y_true, y_probas)
         roc_ax.plot(fpr, tpr, label=f"AUROC={auroc:.4f}")
     roc_ax.plot([0, 1], [0, 1], linestyle="--", color="gray", label="chance")
     roc_ax.set_title(f"{eval_type} ROC")
