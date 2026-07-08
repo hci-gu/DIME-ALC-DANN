@@ -155,7 +155,7 @@ def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader,
     best_threshold = round(float(pr_thresholds[pr_f1.argmax()]), 4) if len(pr_thresholds) else 0.5
 
     # Log figures every 5th epoch or on test set
-    if (epoch % 5 == 0) or (eval_type == "test"):
+    if (eval_type == "test") or ((epoch % 5 == 0) if epoch else False):
         _log_classifier_curves(
             y_true=y_true,
             y_probas=y_probas,
