@@ -1,16 +1,22 @@
 import torch
 import mlflow
 import torch.nn as nn
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
+from io import BytesIO
 from time import time
 from tqdm import tqdm
 from model import DANN
 from torch import optim
 from params import Params
 from typing import Literal
+from PIL import Image
 from torch.utils.data import DataLoader
 from utils.early_stopping import EarlyStopping
 from utils.compute_params import alpha_schedule
+from sklearn.metrics import auc, roc_auc_score, roc_curve, precision_recall_curve
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 
@@ -72,7 +78,7 @@ def train(
         train_loss = train_loss / len(train_loader)
 
         # Validation step
-        val_metrics = evaluate(model, p, classifier_loss_fn, val_loader, device)
+        val_metrics = evaluate(model, p, classifier_loss_fn, val_loader, device, epoch=epoch)
 
         # Log metrics
         mlflow.log_metrics(val_metrics, step=epoch)
@@ -95,19 +101,21 @@ def train(
 
 
 @torch.no_grad()
-def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader, device, eval_type: Literal["val","test"] = "val") -> dict:
+def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader, device, epoch: int = None, eval_type: Literal["val","test"] = "val") -> dict:
     model.eval()
 
     total_classifier_loss = 0.0
     n_correct = 0
     fp, fn, tp, tn = 0, 0, 0, 0
+    y_true, y_score = [], []
     for (x,y,_) in tqdm(eval_loader, desc="[Validation]", position=1, leave=False):
         x = x.to(device)
         y = y.to(device) # class label (intoxicated vs sober)
 
         class_logits = model.predict(x)
+        y_prob = torch.sigmoid(class_logits.squeeze(-1))
         y = y.bool()
-        pred = class_logits.squeeze(-1) > 0
+        pred = y_prob > 0.5
 
         # Loss
         total_classifier_loss += classifier_loss_fn(class_logits.squeeze(-1), y.to(torch.float32)).item()
@@ -118,12 +126,37 @@ def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader,
         tn += (~pred & ~y).sum().item()
         fp += (pred & ~y).sum().item()
         fn += (~pred & y).sum().item()
+        y_true.append(y.cpu())
+        y_score.append(y_prob.cpu())
 
     accuracy = n_correct/len(eval_loader.dataset)
     precision = tp / (tp + fp) if (tp + fp > 0) else 0.0
     recall = tp / (tp + fn) if (tp + fn > 0) else 0.0
+    specificity = tn / (tn + fp) if (tn + fp > 0) else 0.0
+    balanced_accuracy = (recall + specificity) / 2
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall > 0) else 0.0
     total_classifier_loss = total_classifier_loss / len(eval_loader)
+
+    y_true = torch.cat(y_true).numpy()
+    y_score = torch.cat(y_score).numpy()
+    has_both_classes = len(set(y_true.tolist())) == 2
+    auroc = roc_auc_score(y_true, y_score) if has_both_classes else 0.0
+
+    pr_precision, pr_recall, pr_thresholds = precision_recall_curve(y_true, y_score)
+    pr_f1 = 2 * pr_precision[:-1] * pr_recall[:-1] / (pr_precision[:-1] + pr_recall[:-1] + 1e-12)
+    best_threshold = round(float(pr_thresholds[pr_f1.argmax()]), 4) if len(pr_thresholds) else 0.5
+
+    if epoch is not None:
+        _log_classifier_curves(
+            y_true=y_true,
+            y_score=y_score,
+            pr_precision=pr_precision,
+            pr_recall=pr_recall,
+            auroc=auroc,
+            has_both_classes=has_both_classes,
+            eval_type=eval_type,
+            epoch=epoch,
+        )
 
     metrics =  {
         "classifier_loss": total_classifier_loss,
@@ -131,10 +164,65 @@ def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader,
         "precision": precision,
         "recall": recall,
         "f1": f1,
+        "auroc": auroc,
+        "balanced_accuracy": balanced_accuracy,
+        "specificity": specificity,
+        "best_threshold": best_threshold,
         "tp": tp,
         "tn": tn,
         "fp": fp,
         "fn": fn,
     }
     return {f"{eval_type}_{key}": value for (key,value) in metrics.items()}
+
+
+def _log_classifier_curves(
+    y_true,
+    y_score,
+    pr_precision,
+    pr_recall,
+    auroc: float,
+    has_both_classes: bool,
+    eval_type: str,
+    epoch: int,
+) -> None:
+    pr_auc = auc(pr_recall, pr_precision)
+    pr_fig, pr_ax = plt.subplots(figsize=(5, 4), dpi=120)
+    pr_ax.plot(pr_recall, pr_precision, label=f"AUC={pr_auc:.4f}")
+    pr_ax.set_title(f"{eval_type} precision-recall")
+    pr_ax.set_xlabel("Recall")
+    pr_ax.set_ylabel("Precision")
+    pr_ax.set_xlim(0.0, 1.0)
+    pr_ax.set_ylim(0.0, 1.05)
+    pr_ax.legend(loc="lower left")
+    pr_ax.grid(alpha=0.3)
+    _log_figure_with_step(pr_fig, f"{eval_type}_precision_recall_curve", epoch)
+
+    roc_fig, roc_ax = plt.subplots(figsize=(5, 4), dpi=120)
+    if has_both_classes:
+        fpr, tpr, _ = roc_curve(y_true, y_score)
+        roc_ax.plot(fpr, tpr, label=f"AUROC={auroc:.4f}")
+    roc_ax.plot([0, 1], [0, 1], linestyle="--", color="gray", label="chance")
+    roc_ax.set_title(f"{eval_type} ROC")
+    roc_ax.set_xlabel("False positive rate")
+    roc_ax.set_ylabel("True positive rate")
+    roc_ax.set_xlim(0.0, 1.0)
+    roc_ax.set_ylim(0.0, 1.05)
+    roc_ax.legend(loc="lower right")
+    roc_ax.grid(alpha=0.3)
+    _log_figure_with_step(roc_fig, f"{eval_type}_roc_curve", epoch)
+
+
+def _log_figure_with_step(fig, image_key: str, epoch: int) -> None:
+    fig.tight_layout()
+    buffer = BytesIO()
+    fig.savefig(buffer, format="png")
+    buffer.seek(0)
+    image = Image.open(buffer).copy()
+    plt.close(fig)
+
+    try:
+        mlflow.log_image(image, key=image_key, step=epoch)
+    except TypeError:
+        mlflow.log_image(image, artifact_file=f"{image_key}_epoch_{epoch:04d}.png")
 
