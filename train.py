@@ -10,12 +10,16 @@ from tqdm import tqdm
 from PIL import Image
 from io import BytesIO
 from model import DANN
+from optuna import Trial
 from params import Params
 from typing import Literal
+from functools import partial
 from torch import optim, Tensor
 from torch.utils.data import DataLoader
+from torchvision.ops import sigmoid_focal_loss
 from utils.early_stopping import EarlyStopping
 from utils.compute_params import alpha_schedule
+from utils.focal_loss import MulticlassFocalLoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from sklearn.metrics import auc, roc_auc_score, roc_curve, precision_recall_curve
 
@@ -186,6 +190,117 @@ def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader,
         "fn": fn,
     }
     return {f"{eval_type}_{key}": value for (key,value) in metrics.items()}
+
+
+def objective(trial: Trial, train_data, val_data, d_discriminator: int, pos_weight):
+
+    # HPO parameters
+    learning_rate = trial.suggest_float("learning_rate", 1e-5, 3e-3, log=True)
+    weight_decay = trial.suggest_float("weight_decay", 1e-7, 1e-3, log=True)
+    batch_size = trial.suggest_categorical("batch_size", [16, 24, 32])
+    classifier_loss_fn_str = trial.suggest_categorical("classifier_loss_fn", ["BCEWithLogitsLoss", "FocalLoss"])  
+    discriminator_loss_fn_str = trial.suggest_categorical("discriminator_loss_fn", ["CrossEntropyLoss", "FocalLoss"])  
+    optimizer_str = trial.suggest_categorical("optimizer", ["AdamW", "Adam", "SGD", "RMSprop"])
+
+    # Param class
+    p = Params(
+        batch_size=batch_size,
+        optimizer_lr=learning_rate,
+        discriminator_output_dimension=d_discriminator
+    )
+
+    device = torch.device(p.device)
+
+    # DataLoaders
+    train_loader = DataLoader(train_data, p.batch_size, shuffle=True, num_workers=p.n_workers, pin_memory=p.pin_memory)
+    val_loader = DataLoader(val_data, p.batch_size, shuffle=False, num_workers=p.n_workers, pin_memory=p.pin_memory)
+
+    # Load model
+    model = DANN(p)
+    model.to(device)
+
+    # Optimizer
+    if optimizer_str == "AdamW":
+        betas=(
+            trial.suggest_float("adamw_beta1", 0.85, 0.95),
+            trial.suggest_float("adamw_beta2", 0.95, 0.9999),
+        )
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=learning_rate,
+            weight_decay=weight_decay,
+            betas=betas
+        )
+    elif optimizer_str == "Adam":
+        betas=(
+            trial.suggest_float("adam_beta1", 0.85, 0.95),
+            trial.suggest_float("adam_beta2", 0.95, 0.9999),
+        )
+        optimizer = torch.optim.Adam(
+            model.parameters(),
+            lr=learning_rate,
+            weight_decay=weight_decay,
+            betas=betas
+        )
+    elif optimizer_str == "SGD":
+        momentum = trial.suggest_float("sgd_momentum", 0.8, 0.99)
+        nesterov = trial.suggest_categorical("sgd_nesterov", [True, False])
+        optimizer = torch.optim.SGD(
+            model.parameters(),
+            lr=learning_rate,
+            weight_decay=weight_decay,
+            momentum=momentum,
+            nesterov=nesterov
+        )
+    elif optimizer_str == "RMSprop":
+        alpha = trial.suggest_float("rmsprop_alpha", 0.9, 0.999)
+        momentum = trial.suggest_float("rmsprop_momentum", 0, 0.8)
+        optimizer = torch.optim.RMSprop(
+            model.parameters(),
+            lr=learning_rate,
+            weight_decay=weight_decay,
+            alpha=alpha,
+            momentum=momentum
+        )
+    else:
+        raise ValueError(f"Unexpected optimizer value: {optimizer_str}")
+
+
+    # Classifier Loss Function
+    if classifier_loss_fn_str == "BCEWithLogitsLoss":
+        use_pos_weight = trial.suggest_categorical("use_pos_weight", [True, False])
+        pos_weight = pos_weight.to(device)
+        classifier_loss_fn = nn.BCEWithLogitsLoss(pos_weight=(pos_weight if use_pos_weight else None))
+    elif classifier_loss_fn_str == "FocalLoss":
+        classifier_alpha = trial.suggest_float("classifier_alpha", 0.05, 0.9)
+        classifier_gamma = trial.suggest_float("classifier_gamma", 1.0, 3.0)
+        classifier_loss_fn = partial(sigmoid_focal_loss, alpha=classifier_alpha, gamma=classifier_gamma)
+    
+    # Discriminator Loss Function
+    if discriminator_loss_fn_str == "CrossEntropyLoss":
+        label_smoothing = trial.suggest_float("label_smoothing", 0, 0.2)
+        discriminator_loss_fn = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+    elif discriminator_loss_fn_str == "FocalLoss":
+        discriminator_gamma = trial.suggest_float("discriminator_gamma", 1.0, 3.0)
+        discriminator_loss_fn = MulticlassFocalLoss(gamma=discriminator_gamma)
+    loss_functions = (classifier_loss_fn, discriminator_loss_fn)
+
+    with mlflow.start_run(run_name=f"Trial_{trial.number}", nested=True):
+
+        train(
+            model=model,
+            p=p,
+            optimizer=optimizer,
+            loss_functions=loss_functions,
+            train_loader=train_loader,
+            val_loader=val_loader
+        )
+
+        # evaluate model
+        val_metrics = evaluate(model, p, classifier_loss_fn, val_loader, device, eval_type="val")
+
+    return val_metrics[p.optim_metric]
+
 
 
 
