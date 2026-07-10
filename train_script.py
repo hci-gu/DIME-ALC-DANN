@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader, Subset
 def hpo():
 
     # Mlflow tracking
-    experiment_name = "DANN - HPO" + (" (DEV)" if p.dev_run else "")
+    experiment_name = "DANN - HPO"
     mlflow.set_experiment(experiment_name)
     print(f"Starting Experiment: ### {experiment_name} ###")
     print(f"Using MLflow Tracking URI: {mlflow.get_tracking_uri()}")
@@ -29,7 +29,7 @@ def hpo():
     )
 
     # Train/Val/Test splitting
-    train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.8, val_frac=0.1, test_frac=0.1)
+    train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.7, val_frac=0.15, test_frac=0.15)
     train_data = Subset(data, train_indices)
     val_data = Subset(data, val_indices)
     test_data = Subset(data, test_indices)
@@ -139,4 +139,5 @@ def main():
         
 
 if __name__ == "__main__":
-    main()
+    #main()
+    hpo()
