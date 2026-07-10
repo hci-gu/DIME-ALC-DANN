@@ -274,7 +274,7 @@ def objective(trial: Trial, train_data, val_data, d_discriminator: int, pos_weig
     elif classifier_loss_fn_str == "FocalLoss":
         classifier_alpha = trial.suggest_float("classifier_alpha", 0.05, 0.9)
         classifier_gamma = trial.suggest_float("classifier_gamma", 1.0, 3.0)
-        classifier_loss_fn = partial(sigmoid_focal_loss, alpha=classifier_alpha, gamma=classifier_gamma)
+        classifier_loss_fn = partial(sigmoid_focal_loss, alpha=classifier_alpha, gamma=classifier_gamma, reduction="mean")
     
     # Discriminator Loss Function
     if discriminator_loss_fn_str == "CrossEntropyLoss":
