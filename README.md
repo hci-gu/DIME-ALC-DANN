@@ -33,3 +33,7 @@ Create a temporary port forward on your local machine
 ``` bash
 ssh -L 5000:127.0.0.1:5000 user@REMOTE_HOSTNAME
 ```
+
+### Useful links:
+- https://audeering.github.io/opensmile-python/ (OpenSmile)
+- https://github.com/NaJaeMin92/pytorch-DANN (pytorch DANN example)

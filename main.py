@@ -15,8 +15,6 @@ from utils.argument_parsing import parse_args
 from torch.utils.data import DataLoader, Subset
 
 
-
-
 def main():
 
     # CLI args
@@ -171,4 +169,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    #hpo()
