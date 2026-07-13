@@ -15,6 +15,7 @@ def positive_int(value: str) -> int:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="DANN trainer")
     parser.add_argument("--dev-run", action="store_true", default=None)
+    parser.add_argument("--hpo", action="store_true", default=False)
     parser.add_argument("--verbose", action="store_true", default=False)
     parser.add_argument("--save-model", action="store_true", default=True)
     parser.add_argument("--use-pos-weight", action="store_true", default=True)

@@ -93,7 +93,7 @@ def train(
         scheduler.step(val_metrics[p.optim_metric])
 
         # Update tqdm bar
-        train_pbar.set_description_str(f"Training L_tr={train_loss:.4f}|L_val={val_metrics["val_classifier_loss"]:.4f}")
+        train_pbar.set_description_str(f"Training L_tot_tr={train_loss:.4f}|L_clf_val={val_metrics["val/classifier_loss"]:.4f}")
 
         # Check early stopping
         if stopping_criterion(model, val_metrics[p.optim_metric]):
@@ -189,7 +189,7 @@ def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader,
         "fp": fp,
         "fn": fn,
     }
-    return {f"{eval_type}_{key}": value for (key,value) in metrics.items()}
+    return {f"{eval_type}/{key}": value for (key,value) in metrics.items()}
 
 
 def objective(trial: Trial, train_data, val_data, d_discriminator: int, pos_weight):
@@ -287,6 +287,8 @@ def objective(trial: Trial, train_data, val_data, d_discriminator: int, pos_weig
 
     with mlflow.start_run(run_name=f"Trial_{trial.number}", nested=True):
 
+        mlflow.log_params(trial.params)
+
         train(
             model=model,
             p=p,
@@ -298,6 +300,9 @@ def objective(trial: Trial, train_data, val_data, d_discriminator: int, pos_weig
 
         # evaluate model
         val_metrics = evaluate(model, p, classifier_loss_fn, val_loader, device, eval_type="val")
+
+        mlflow.log_metrics(val_metrics)
+        mlflow.log_metric("hpo/objective", val_metrics[p.optim_metric])
 
     return val_metrics[p.optim_metric]
 

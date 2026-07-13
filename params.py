@@ -13,7 +13,7 @@ class Params():
     batch_size: int = 128
     n_workers: int = 1
     device: str = field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
-    optim_metric: str = "val_classifier_loss"
+    optim_metric: str = "val/classifier_loss"
     pin_memory: bool = field(default_factory=lambda: torch.cuda.is_available())
 
 

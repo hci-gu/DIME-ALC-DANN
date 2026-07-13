@@ -9,48 +9,12 @@ from params import Params
 from alc_data import ALCData
 from functools import partial
 from dataclasses import asdict
+from utils.hpo_status import filter_study
 from train import train, evaluate, objective
 from utils.argument_parsing import parse_args
 from torch.utils.data import DataLoader, Subset
 
-def hpo():
 
-    # Mlflow tracking
-    experiment_name = "DANN - HPO"
-    mlflow.set_experiment(experiment_name)
-    print(f"Starting Experiment: ### {experiment_name} ###")
-    print(f"Using MLflow Tracking URI: {mlflow.get_tracking_uri()}")
-
-    # Load data
-    data = ALCData(
-        max_samples=None,
-        seed=1999,
-    )
-
-    # Train/Val/Test splitting
-    train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.7, val_frac=0.15, test_frac=0.15)
-    train_data = Subset(data, train_indices)
-    val_data = Subset(data, val_indices)
-    test_data = Subset(data, test_indices)
-    discriminator_output_dimension = len(data.train_speakers_id) # n_speakers in train_data
-    pos_weight = data.calculate_pos_weight(train_indices=train_indices)
-    data.cache(train_indices)
-
-    # HPO parameters
-    N_TRIALS = 100
-    N_WARMUP_TRIALS = 10
-    TIMEOUT_IN_SECONDS = int(60 * 60 * 24 * 2.0)  # 2 Days in seconds
-    SEED = 1999
-
-    # Perform HPO
-    sampler = optuna.samplers.TPESampler(seed=SEED, n_startup_trials=N_WARMUP_TRIALS, multivariate=True)
-    study = optuna.create_study(direction="minimize", sampler=sampler, study_name="dann_alc")
-    objective_fn = partial(objective, train_data=train_data, val_data=val_data, d_discriminator=discriminator_output_dimension, pos_weight=pos_weight)
-    study.optimize(objective_fn, n_trials=N_TRIALS, timeout=TIMEOUT_IN_SECONDS, catch=(RuntimeError, torch.cuda.OutOfMemoryError))
-
-    # Select the best trial parameters
-
-    test_loader = DataLoader(test_data, batch_size=16, shuffle=False)
 
 
 def main():
@@ -98,48 +62,111 @@ def main():
     val_loader = DataLoader(val_data, p.batch_size, shuffle=False, num_workers=p.n_workers, pin_memory=p.pin_memory)
     test_loader = DataLoader(test_data, p.batch_size, shuffle=False, num_workers=p.n_workers, pin_memory=p.pin_memory)
 
-    # Load model
-    model = DANN(p)
-    model.to(device)
+    # Do we perform HPO or not
+    if args.hpo:
+        with mlflow.start_run(run_name="HPO", tags={"run_type": "hpo"}):
+            # HPO parameters
+            N_TRIALS = 100
+            N_WARMUP_TRIALS = 10
+            TIMEOUT_IN_SECONDS = int(60 * 60 * 24 * 2.0)  # 2 Days in seconds
+            SEED = 1999
 
-    # Optimizer
-    optimizer_cls = getattr(torch.optim, p.optimizer)
-    optimizer = optimizer_cls(model.parameters(), **p.get_vars_from_prefix("optimizer"))
+            mlflow.log_params({
+                "n_trials": N_TRIALS,
+                "n_warmup_trials": N_WARMUP_TRIALS,
+                "timeout": TIMEOUT_IN_SECONDS,
+                "optuna_seed": SEED
+            })
 
-    # Loss function
-    classifier_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-    discriminator_loss_fn = nn.CrossEntropyLoss()
-    loss_functions = (classifier_loss_fn, discriminator_loss_fn)
+            # Log parameters
+            mlflow.log_params(asdict(p))
 
-    with mlflow.start_run():
+            # Log data metadata
+            mlflow.log_dict(data.get_split_speakers(),"speaker_data_split.json")
 
-        # Log parameters
-        mlflow.log_params(asdict(p))
+            # Perform HPO
+            sampler = optuna.samplers.TPESampler(seed=SEED, n_startup_trials=N_WARMUP_TRIALS, multivariate=True)
+            study = optuna.create_study(direction="minimize", sampler=sampler, study_name="dann_alc")
+            objective_fn = partial(objective, train_data=train_data, val_data=val_data, d_discriminator=p.discriminator_output_dimension, pos_weight=pos_weight)
+            study.optimize(objective_fn, n_trials=N_TRIALS, timeout=TIMEOUT_IN_SECONDS, catch=(torch.cuda.OutOfMemoryError))
 
-        # Log data metadata
-        mlflow.log_dict(data.get_split_speakers(),"speaker_data_split.json")
+            completed, failed, pruned = filter_study(study)
 
-        # Start training
-        train(
-            model=model,
-            p=p,
-            optimizer=optimizer,
-            loss_functions=loss_functions,
-            train_loader=train_loader,
-            val_loader=val_loader
-        )
+            mlflow.log_metrics({
+                "hpo/completed_trials": len(completed),
+                "hpo/failed_trials": len(failed),
+                "hpo/pruned_trials": len(pruned),
+                "hpo/total_trials": len(study.trials),
+            })
 
-        # Run test evaluation
-        test_metrics = evaluate(model, p, classifier_loss_fn, test_loader, device, eval_type="test")
-        mlflow.log_metrics(test_metrics)
+            if not completed:
+                raise RuntimeError(
+                    "HPO finished without a completed trial; "
+                    "see the failed child runs for the underlying errors."
+                )
 
-        # Save model & optimizer
-        if save_model:
-            model.to("cpu")
-            run_name = mlflow.active_run().data.tags["mlflow.runName"].replace(" ", "_").replace("/", "_").replace("\\", "_")
-            save_path = os.path.join("weights",f"dann_model-{run_name}.pth")
-            torch.save(model, save_path)
-            print(f"Saved model to: {save_path}")
+            # Select the best trial parameters
+            best_trial = study.best_trial
+
+            mlflow.log_param("hpo/best_trial_number", best_trial.number)
+            mlflow.log_metric("hpo/best_objective", float(best_trial.value))
+            mlflow.log_params({
+                f"hpo/best_{name}": value
+                for name, value in best_trial.params.items()
+            })
+            mlflow.log_dict(
+                {
+                "trial_number": best_trial.number,
+                "objective_value": best_trial.value,
+                "params": best_trial.params,
+                },
+                "hpo/best_trial.json",
+            )
+
+    else:
+
+        # Load model
+        model = DANN(p)
+        model.to(device)
+
+        # Optimizer
+        optimizer_cls = getattr(torch.optim, p.optimizer)
+        optimizer = optimizer_cls(model.parameters(), **p.get_vars_from_prefix("optimizer"))
+
+        # Loss function
+        classifier_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        discriminator_loss_fn = nn.CrossEntropyLoss()
+        loss_functions = (classifier_loss_fn, discriminator_loss_fn)
+
+        with mlflow.start_run():
+
+            # Log parameters
+            mlflow.log_params(asdict(p))
+
+            # Log data metadata
+            mlflow.log_dict(data.get_split_speakers(),"speaker_data_split.json")
+
+            # Start training
+            train(
+                model=model,
+                p=p,
+                optimizer=optimizer,
+                loss_functions=loss_functions,
+                train_loader=train_loader,
+                val_loader=val_loader
+            )
+
+            # Run test evaluation
+            test_metrics = evaluate(model, p, classifier_loss_fn, test_loader, device, eval_type="test")
+            mlflow.log_metrics(test_metrics)
+
+            # Save model & optimizer
+            if save_model:
+                model.to("cpu")
+                run_name = mlflow.active_run().data.tags["mlflow.runName"].replace(" ", "_").replace("/", "_").replace("\\", "_")
+                save_path = os.path.join("weights",f"dann_model-{run_name}.pth")
+                torch.save(model, save_path)
+                print(f"Saved model to: {save_path}")
         
 
 if __name__ == "__main__":
