@@ -82,7 +82,7 @@ def main():
     )
 
     # Train/Val/Test splitting
-    train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.8, val_frac=0.1, test_frac=0.1)
+    train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.7, val_frac=0.15, test_frac=0.15)
     train_data = Subset(data, train_indices)
     val_data = Subset(data, val_indices)
     test_data = Subset(data, test_indices)
@@ -139,5 +139,5 @@ def main():
         
 
 if __name__ == "__main__":
-    #main()
-    hpo()
+    main()
+    #hpo()
