@@ -7,7 +7,7 @@ import os.path as osp
 
 from time import time
 from tqdm import tqdm
-from torch.utils.data import Dataset, Subset, DataLoader
+from torch.utils.data import Dataset, Subset
 
 
 class ALCData(Dataset):
@@ -17,7 +17,6 @@ class ALCData(Dataset):
         data_path = None,
         transforms = None,
         max_samples: int = None,
-        cache_features: bool = False,
         seed: int = 1999,
         verbose: bool = False
         ):
@@ -34,8 +33,8 @@ class ALCData(Dataset):
         self.transforms = transforms
         self.verbose = verbose
         self.max_samples = max_samples
-        self.is_cached = False
         self.seed = seed
+        self.is_cached = False
         self.is_split = False
         self.train_speaker_mapping = {}
 
@@ -46,7 +45,7 @@ class ALCData(Dataset):
     def prepare(self):
         """ Prepares the data before training """
 
-        # Read in all files paths
+        # Read in all files from paths
         self.audio_files = sorted([file for file in os.listdir(self.AUDIO_PATH) if file.endswith(".wav")])
         self.label_files = sorted([file for file in os.listdir(self.LABELS_PATH) if file.endswith(".json")])
         assert len(self.audio_files) == len(self.label_files), "Mismatch in number of audio and label files"
@@ -54,12 +53,12 @@ class ALCData(Dataset):
         label_stems = {label_file.removesuffix("_annot.json"): label_file for label_file in self.label_files} 
 
         # Order independent audio <-> label file mapping
-        audio_label_mapping = {}
+        audio_label_mapping = {} # 0061006001_h_00.wav -> 0061006001_h_00_annot.json
         for audio_file in self.audio_files:
             audio_stem: str = audio_file.removesuffix(".wav")
             if audio_stem not in label_stems:
                 raise RuntimeError(f"Unmatched audio file: {audio_file}")
-            audio_label_mapping[audio_file] = label_stems[audio_stem] # 0061006001_h_00.wav -> 0061006001_h_00_annot.json
+            audio_label_mapping[audio_file] = label_stems[audio_stem] 
         
         matched_audio_files = list(audio_label_mapping.keys())
         if self.max_samples:
@@ -74,7 +73,7 @@ class ALCData(Dataset):
         self.files = [] # 0061006001_h_00.wav
         self.class_labels = [] # 0 (NA), 1 (A)
         self.speaker_id_to_index = {} # speaker_id : speaker_index (used to map random speakerID to 0,1,2,...,n_speakers-1)
-        self.speaker_ids = []
+        self.speaker_ids = [] # list of speaker ids (duplicates can occur)
         for audio_file in tqdm(matched_audio_files):
 
             label_file = audio_label_mapping[audio_file]
@@ -97,17 +96,17 @@ class ALCData(Dataset):
                     self.speaker_id_to_index[speaker_id] = len(self.speaker_id_to_index)
 
         if self.verbose:
-            print(f"Number of data samples used for training & testing: {len(self.class_labels)}")
+            print(f"Number of data samples used for training & testing: {len(self.class_labels)} (filtered out control group class)")
 
         self.class_labels = torch.tensor(self.class_labels, dtype=torch.int64)
         self.len = len(self.class_labels)
     
 
-    def cache(self, train_indices):
+    def cache(self, train_indices=None):
 
         # Look in .cache and see if the data is stored load and return
         os.makedirs(".cache", exist_ok=True)
-        cache_path = osp.join(".cache","opensmile-features-standardized.pt")
+        cache_path = osp.join(".cache","opensmile-features.pt")
         if osp.exists(cache_path):
 
             if self.verbose: print(f"Loading pre-processed audio features from cache: {cache_path}")
@@ -129,7 +128,6 @@ class ALCData(Dataset):
                 for audio_file in self.files
             }
 
-            self.is_cached = True
             del all_features
 
         else: # Calculate features
@@ -144,19 +142,21 @@ class ALCData(Dataset):
                 self.cache_dict[audio_file] = x
             feature_tensor = torch.stack(feature_tensor)
 
-            # Calculate mu, sigma based on train indices
-            mu, sigma = feature_tensor[train_indices].mean(dim=0), feature_tensor[train_indices].std(dim=0)
-            if self.verbose: print("Z-score shapes:", mu.shape, sigma.shape)
-            for k,v in self.cache_dict.items():
-                self.cache_dict[k] = torch.where(sigma > 0, (v - mu) / sigma, torch.zeros_like(v))
-            self.is_cached = True
 
             # If file does not exist save to disk for future
             if self.max_samples is None:
                 torch.save(self.cache_dict, cache_path)
             elif self.verbose:
                 print("Skipping persistent feature cache because max_samples is set")
+
+        # Calculate mu, sigma based on train indices
+        feature_tensor = torch.stack([self.cache_dict[file] for file in self.files])
+        train_features = feature_tensor if train_indices is None else feature_tensor[train_indices]
+        self.mu = train_features.mean(dim=0)
+        self.sigma = train_features.std(dim=0)
     
+        if self.verbose: print("Z-score shapes:", self.mu.shape, self.sigma.shape)
+        self.is_cached = True
 
     def calculate_pos_weight(self, train_indices):
         train_labels = self.class_labels[train_indices]
@@ -212,6 +212,7 @@ class ALCData(Dataset):
         self.is_split = True
         return train_indices, val_indices, test_indices
 
+
     def get_split_speakers(self) -> dict[str,list]:
         if not self.is_split: raise RuntimeError("Call speaker_split() before get_split_speakers()")
         return {
@@ -225,7 +226,6 @@ class ALCData(Dataset):
 
     def __getitem__(self, index):
         audio_file = self.files[index]
-        audio_path = osp.join(self.AUDIO_PATH, audio_file)
         speaker_id = int(audio_file[:3])
         class_label = self.class_labels[index]
 
@@ -237,11 +237,16 @@ class ALCData(Dataset):
         if self.is_cached:
             x = self.cache_dict[audio_file]
         else:
+            audio_path = osp.join(self.AUDIO_PATH, audio_file)
             x = torch.tensor(self.processor.process_file(audio_path).to_numpy(), dtype=torch.float32).squeeze(0)
+        
+        # Z-score standardization
+        x = torch.where(self.sigma > 0, (x - self.mu) / self.sigma, torch.zeros_like(x))
 
         if self.transforms:
             x = self.transforms(x)
         return x, class_label, local_index
+
 
     def get_example_sample(self, n: int = 5):
         sample_idx = np.random.default_rng(seed=self.seed).choice(self.len, size=n, replace=False)
@@ -263,9 +268,9 @@ if __name__ == "__main__":
     t = time()
     data = ALCData(
         max_samples=None,
-        cache_features=False,
         verbose=True,
     )
+    data.cache()
     t_tot = time() - t
     print(f"Total time to setup dataset: {t_tot:.2f} s")
     print(f"Number of data samples: {len(data)}")

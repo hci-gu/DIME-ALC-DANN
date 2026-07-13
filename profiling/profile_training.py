@@ -47,6 +47,7 @@ def build_training_objects(args: argparse.Namespace):
     device = torch.device(p.device)
 
     data = ALCData(max_samples=args.max_samples, verbose=True)
+    data.cache()
     generator = torch.Generator().manual_seed(args.seed)
     train_data, _, _ = random_split(data, [0.8, 0.1, 0.1], generator=generator)
     pos_weight = data.calculate_pos_weight(train_data.indices).to(device) if p.use_pos_weight else None

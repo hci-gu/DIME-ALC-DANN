@@ -201,6 +201,7 @@ def main() -> None:
     device = torch.device(p.device)
     print(f"Using device: {device}")
     data = ALCData(max_samples=args.max_samples, verbose=True)
+    data.cache()
     generator = torch.Generator().manual_seed(args.seed)
     train_data, _, _ = random_split(data, [0.8, 0.1, 0.1], generator=generator)
 

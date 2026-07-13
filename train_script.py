@@ -24,7 +24,6 @@ def hpo():
     # Load data
     data = ALCData(
         max_samples=None,
-        cache_features=True,
         seed=1999,
     )
 
@@ -81,7 +80,6 @@ def main():
     print(f"Loading data...")
     data = ALCData(
         max_samples=max_samples,
-        cache_features=args.cache_features,
         seed=SEED,
         verbose=verbose
     )
