@@ -35,16 +35,21 @@ def hpo():
     test_data = Subset(data, test_indices)
     discriminator_output_dimension = len(data.train_speakers_id) # n_speakers in train_data
     pos_weight = data.calculate_pos_weight(train_indices=train_indices)
+    data.cache(train_indices)
 
+    # HPO parameters
     N_TRIALS = 100
     N_WARMUP_TRIALS = 10
     TIMEOUT_IN_SECONDS = int(60 * 60 * 24 * 2.0)  # 2 Days in seconds
     SEED = 1999
 
+    # Perform HPO
     sampler = optuna.samplers.TPESampler(seed=SEED, n_startup_trials=N_WARMUP_TRIALS, multivariate=True)
     study = optuna.create_study(direction="minimize", sampler=sampler, study_name="dann_alc")
     objective_fn = partial(objective, train_data=train_data, val_data=val_data, d_discriminator=discriminator_output_dimension, pos_weight=pos_weight)
     study.optimize(objective_fn, n_trials=N_TRIALS, timeout=TIMEOUT_IN_SECONDS, catch=(RuntimeError, torch.cuda.OutOfMemoryError))
+
+    # Select the best trial parameters
 
     test_loader = DataLoader(test_data, batch_size=16, shuffle=False)
 
@@ -88,6 +93,7 @@ def main():
     test_data = Subset(data, test_indices)
     p.discriminator_output_dimension = len(data.train_speakers_id) # n_speakers in train_data
     pos_weight = data.calculate_pos_weight(train_indices=train_indices).to(device) if p.use_pos_weight else None
+    data.cache(train_indices)
 
     # DataLoaders
     train_loader = DataLoader(train_data, p.batch_size, shuffle=True, num_workers=p.n_workers, pin_memory=p.pin_memory)

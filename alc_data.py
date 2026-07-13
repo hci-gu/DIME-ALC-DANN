@@ -39,10 +39,10 @@ class ALCData(Dataset):
         self.is_split = False
         self.train_speaker_mapping = {}
 
-        self.prepare()
-        if cache_features:
-            self.cache()
+        # Prepare dataset
+        self.prepare() 
     
+
     def prepare(self):
         """ Prepares the data before training """
 
@@ -103,7 +103,7 @@ class ALCData(Dataset):
         self.len = len(self.class_labels)
     
 
-    def cache(self):
+    def cache(self, train_indices):
 
         # Look in .cache and see if the data is stored load and return
         os.makedirs(".cache", exist_ok=True)
@@ -131,28 +131,33 @@ class ALCData(Dataset):
 
             self.is_cached = True
             del all_features
-            return
 
-        if self.verbose: print(f"Calculating and caching audio preprocessing")
-        self.cache_dict = {}
-        feature_tensor = torch.zeros((self.len,6373)) # Use to compute Z-score standardization constants
-        for idx, audio_file in enumerate(tqdm(self.files)):
-            audio_path = osp.join(self.AUDIO_PATH, audio_file)
-            x = torch.tensor(self.processor.process_file(audio_path).to_numpy(), dtype=torch.float32).squeeze(0)
-            feature_tensor[idx,:] = x
-            self.cache_dict[audio_file] = x
-        mu, sigma = feature_tensor.mean(dim=0), feature_tensor.std(dim=0)
-        print("Z-score shapes:", mu.shape, sigma.shape)
-        for k,v in self.cache_dict.items():
-            self.cache_dict[k] = (v-mu) / sigma
-        self.is_cached = True
+        else: # Calculate features
 
-        # If file does not exist save to disk for future
-        if self.max_samples is None:
-            torch.save(self.cache_dict, cache_path)
-        elif self.verbose:
-            print("Skipping persistent feature cache because max_samples is set")
+            if self.verbose: print(f"Calculating and caching audio preprocessing")
+            self.cache_dict = {}
+            feature_tensor = [] # Use to compute Z-score standardization constants
+            for audio_file in tqdm(self.files):
+                audio_path = osp.join(self.AUDIO_PATH, audio_file)
+                x = torch.tensor(self.processor.process_file(audio_path).to_numpy(), dtype=torch.float32).squeeze(0)
+                feature_tensor.append(x)
+                self.cache_dict[audio_file] = x
+            feature_tensor = torch.stack(feature_tensor)
+
+            # Calculate mu, sigma based on train indices
+            mu, sigma = feature_tensor[train_indices].mean(dim=0), feature_tensor[train_indices].std(dim=0)
+            if self.verbose: print("Z-score shapes:", mu.shape, sigma.shape)
+            for k,v in self.cache_dict.items():
+                self.cache_dict[k] = torch.where(sigma > 0, (v - mu) / sigma, torch.zeros_like(v))
+            self.is_cached = True
+
+            # If file does not exist save to disk for future
+            if self.max_samples is None:
+                torch.save(self.cache_dict, cache_path)
+            elif self.verbose:
+                print("Skipping persistent feature cache because max_samples is set")
     
+
     def calculate_pos_weight(self, train_indices):
         train_labels = self.class_labels[train_indices]
         n_pos = train_labels.sum()
