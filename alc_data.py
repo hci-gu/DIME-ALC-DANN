@@ -19,7 +19,8 @@ class ALCData(Dataset):
         max_samples: int = None,
         cache_features: bool = False,
         seed: int = 1999,
-        verbose: bool = False):
+        verbose: bool = False
+        ):
         super().__init__()
 
         self.ROOT = data_path if data_path else osp.join("data","ALC")
@@ -106,7 +107,7 @@ class ALCData(Dataset):
 
         # Look in .cache and see if the data is stored load and return
         os.makedirs(".cache", exist_ok=True)
-        cache_path = osp.join(".cache","opensmile-features.pt")
+        cache_path = osp.join(".cache","opensmile-features-standardized.pt")
         if osp.exists(cache_path):
 
             if self.verbose: print(f"Loading pre-processed audio features from cache: {cache_path}")
@@ -134,10 +135,16 @@ class ALCData(Dataset):
 
         if self.verbose: print(f"Calculating and caching audio preprocessing")
         self.cache_dict = {}
-        for audio_file in tqdm(self.files):
+        feature_tensor = torch.zeros((self.len,6373)) # Use to compute Z-score standardization constants
+        for idx, audio_file in enumerate(tqdm(self.files)):
             audio_path = osp.join(self.AUDIO_PATH, audio_file)
             x = torch.tensor(self.processor.process_file(audio_path).to_numpy(), dtype=torch.float32).squeeze(0)
+            feature_tensor[idx,:] = x
             self.cache_dict[audio_file] = x
+        mu, sigma = feature_tensor.mean(dim=0), feature_tensor.std(dim=0)
+        print("Z-score shapes:", mu.shape, sigma.shape)
+        for k,v in self.cache_dict.items():
+            self.cache_dict[k] = (v-mu) / sigma
         self.is_cached = True
 
         # If file does not exist save to disk for future
