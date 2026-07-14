@@ -1,19 +1,19 @@
-import argparse
 import csv
 import sys
 import time
+import argparse
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import torch
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from alc_data import ALCData
 from params import Params
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, Subset
 
 
 def parse_int_list(value: str) -> list[int]:
@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--include-transfer", action="store_true")
     parser.add_argument("--csv-path", type=Path, default=None)
-    parser.add_argument("--plot-path", type=Path, default=ROOT / "benchmark" / "dataloader_benchmark.png")
+    parser.add_argument("--plot-path", type=Path, default=Path(__file__).with_name("dataloader_benchmark.png"))
     return parser.parse_args()
 
 
@@ -193,17 +193,22 @@ def plot_results(path: Path, results: list[dict]) -> None:
 
 def main() -> None:
     args = parse_args()
-    p = Params(dev_run=True)
-    if args.batch_size is not None:
-        p.batch_size = args.batch_size
-    p.device = args.device
+    p = Params.from_optional_overrides(
+        dev_run=True,
+        batch_size=args.batch_size,
+        device=args.device,
+    )
 
     device = torch.device(p.device)
     print(f"Using device: {device}")
-    data = ALCData(max_samples=args.max_samples, verbose=True)
-    data.cache()
-    generator = torch.Generator().manual_seed(args.seed)
-    train_data, _, _ = random_split(data, [0.8, 0.1, 0.1], generator=generator)
+    data = ALCData(max_samples=args.max_samples, seed=args.seed, verbose=True)
+    train_indices, _, _ = data.speaker_split(
+        train_frac=0.7,
+        val_frac=0.15,
+        test_frac=0.15,
+    )
+    data.cache(train_indices)
+    train_data = Subset(data, train_indices)
 
     results = []
     for num_workers in args.num_workers:

@@ -1,25 +1,25 @@
-import argparse
 import sys
+import argparse
 from pathlib import Path
 
 import torch
 import torch.nn as nn
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from alc_data import ALCData
 from model import DANN
 from params import Params
-from torch.profiler import ProfilerActivity, profile, record_function, schedule, tensorboard_trace_handler
-from torch.utils.data import DataLoader, random_split
+from alc_data import ALCData
 from utils.compute_params import alpha_schedule
+from torch.utils.data import DataLoader, Subset
+from torch.profiler import ProfilerActivity, profile, record_function, schedule, tensorboard_trace_handler
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Profile DANN training with PyTorch profiler.")
-    parser.add_argument("--log-dir", type=Path, default=ROOT / "profiling" / "tensorboard")
+    parser.add_argument("--log-dir", type=Path, default=Path(__file__).with_name("tensorboard"))
     parser.add_argument("--max-samples", type=int, default=500)
     parser.add_argument("--seed", type=int, default=1999)
     parser.add_argument("--batch-size", type=int, default=None)
@@ -36,22 +36,25 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_training_objects(args: argparse.Namespace):
-    p = Params(dev_run=True)
-    if args.batch_size is not None:
-        p.batch_size = args.batch_size
-    if args.num_workers is not None:
-        p.n_workers = args.num_workers
-    if args.device is not None:
-        p.device = args.device
+    p = Params.from_optional_overrides(
+        dev_run=True,
+        batch_size=args.batch_size,
+        n_workers=args.num_workers,
+        device=args.device,
+    )
 
     device = torch.device(p.device)
 
-    data = ALCData(max_samples=args.max_samples, verbose=True)
-    data.cache()
-    generator = torch.Generator().manual_seed(args.seed)
-    train_data, _, _ = random_split(data, [0.8, 0.1, 0.1], generator=generator)
-    pos_weight = data.calculate_pos_weight(train_data.indices).to(device) if p.use_pos_weight else None
-    p.discriminator_output_dimension = len(data.speaker_id_to_index)
+    data = ALCData(max_samples=args.max_samples, seed=args.seed, verbose=True)
+    train_indices, _, _ = data.speaker_split(
+        train_frac=0.7,
+        val_frac=0.15,
+        test_frac=0.15,
+    )
+    train_data = Subset(data, train_indices)
+    p.discriminator_output_dimension = len(data.train_speakers_id)
+    pos_weight = data.calculate_pos_weight(train_indices).to(device) if p.use_pos_weight else None
+    data.cache(train_indices)
 
     train_loader = DataLoader(
         train_data,

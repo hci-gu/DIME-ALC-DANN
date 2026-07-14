@@ -31,7 +31,7 @@ def main():
     SEED = args.seed
 
     # Mlflow tracking
-    experiment_name = "DANN" + (" (DEV)" if p.dev_run else "")
+    experiment_name = "DANN"
     mlflow.set_experiment(experiment_name)
     print(f"Starting Experiment: ### {experiment_name} ###")
     print(f"Using MLflow Tracking URI: {mlflow.get_tracking_uri()}")

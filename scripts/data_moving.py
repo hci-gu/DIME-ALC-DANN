@@ -5,9 +5,7 @@ import shutil
 import os.path as osp
 
 # Directories
-ROOT_DIR = osp.join("data","ALC")
-METADATA_DIR = osp.join(ROOT_DIR,"metadata")
-TABLE_DIR = osp.join(METADATA_DIR,"CLARINDocu","TABLE")
+ROOT_DIR = osp.join("..","data","ALC")
 
 dry_run = False # False means does actual copying
 is_verbose = False

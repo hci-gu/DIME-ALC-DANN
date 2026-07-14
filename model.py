@@ -75,6 +75,27 @@ class Discriminator(Module):
     def forward(self, x: Tensor) -> Tensor:
         return self.discriminator(x)
 
+class MLP(Module):
+
+    def __init__(
+        self,
+        input_dimension: int,
+        hidden_dimension: int,
+        output_dimension: int,
+        p_dropout: float = 0.5,
+    ):
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(input_dimension, hidden_dimension),
+            nn.BatchNorm1d(hidden_dimension),
+            nn.ReLU(),
+            nn.Dropout(p_dropout),
+            nn.Linear(hidden_dimension, output_dimension),
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.mlp(x)
+
 
 if __name__ == "__main__":
     

@@ -107,7 +107,7 @@ def train(
 
 
 @torch.no_grad()
-def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader, device, epoch: int = None, eval_type: Literal["val","test"] = "val") -> dict:
+def evaluate(model: nn.Module, p:Params, classifier_loss_fn, eval_loader: DataLoader, device, epoch: int = None, eval_type: Literal["val","test"] = "val") -> dict:
     model.eval()
 
     total_classifier_loss = 0.0
@@ -118,7 +118,7 @@ def evaluate(model: DANN, p:Params, classifier_loss_fn, eval_loader: DataLoader,
         x: Tensor = x.to(device) # [B,d_input]
         y = y.to(device) # class label (intoxicated vs sober)
 
-        class_logits = model.predict(x)
+        class_logits = model.predict(x) if hasattr(model, "predict") else model(x)
         y_prob = torch.sigmoid(class_logits.squeeze(-1))
         y = y.bool()
 
@@ -360,4 +360,3 @@ def _log_figure_with_step(fig, image_key: str, epoch: int) -> None:
         mlflow.log_image(image, key=image_key, step=epoch)
     except TypeError:
         mlflow.log_image(image, artifact_file=f"{image_key}_epoch_{epoch:04d}.png")
-
