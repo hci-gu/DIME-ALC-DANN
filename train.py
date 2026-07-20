@@ -232,9 +232,6 @@ def objective(trial: Trial, train_data, val_data, d_discriminator: int, pos_weig
         discriminator_output_dimension=d_discriminator
     )
 
-    # Log parameters
-    mlflow.log_params(asdict(p))
-
     device = torch.device(p.device)
 
     # DataLoaders
@@ -316,7 +313,7 @@ def objective(trial: Trial, train_data, val_data, d_discriminator: int, pos_weig
         mlflow.log_params(trial.params)
         
         # Overwrite default param values with HPO params and log to mlflow
-        p.from_optional_overrides(trial.params)
+        p.from_optional_overrides(**trial.params)
         mlflow.log_params(asdict(p))
 
         train(
