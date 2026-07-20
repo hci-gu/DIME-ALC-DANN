@@ -43,7 +43,7 @@ class Params():
     extractor_n_layers: int = 3
     extractor_output_dimension: int = 256
     extractor_activation_function: str = "relu"
-    extractor_p_dropout: float = 0.0
+    extractor_p_dropout: float = 0.2
 
 
     # Classifier
@@ -52,7 +52,7 @@ class Params():
     classifier_n_layers: int = 5
     classifier_output_dimension: int = 1
     classifier_activation_function: str = "relu"
-    classifier_p_dropout: float = 0.0
+    classifier_p_dropout: float = 0.2
 
 
     # Discriminator
@@ -61,7 +61,7 @@ class Params():
     discriminator_n_layers: int = 5
     discriminator_output_dimension: int = 10
     discriminator_activation_function: str = "relu"
-    discriminator_p_dropout: float = 0.0
+    discriminator_p_dropout: float = 0.2
 
     @classmethod
     def from_optional_overrides(cls, **overrides):

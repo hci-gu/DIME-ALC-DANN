@@ -98,7 +98,8 @@ def train(
             {
             "train_loss": train_loss,
             "classifier_accuracy": classifier_accuracy,
-            "discriminator_accuracy": discriminator_accuracy
+            "discriminator_accuracy": discriminator_accuracy,
+            "discriminator_chance_delta": discriminator_accuracy - 1/p.discriminator_output_dimension # deviation from random chance
             },
             step=epoch
         )
