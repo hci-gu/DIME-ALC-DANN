@@ -7,8 +7,6 @@ import matplotlib.pyplot as plt
 
 from time import time
 from tqdm import tqdm
-from PIL import Image
-from io import BytesIO
 from model import DANN
 from optuna import Trial
 from params import Params
@@ -132,8 +130,14 @@ def evaluate(model: nn.Module, p:Params, classifier_loss_fn, eval_loader: DataLo
     y_true = np.concatenate(y_true)
     y_probas = np.concatenate(y_probas)
 
+    # Precision-Recall Curve & optimal threshold
+    pr_precision, pr_recall, pr_thresholds = precision_recall_curve(y_true, y_probas)
+    pr_f1 = 2 * pr_precision[:-1] * pr_recall[:-1] / (pr_precision[:-1] + pr_recall[:-1] + 1e-12)
+    best_f1 = pr_f1.max()
+    best_threshold = float(pr_thresholds[pr_f1.argmax()]) if len(pr_thresholds) else 0.5
+
     # Threshold probabilities to get vector
-    y_pred = (y_probas > 0.5)
+    y_pred = (y_probas >= best_threshold)
     
     # Confusion matrix elements
     tp = (y_pred & y_true).sum()
@@ -153,13 +157,7 @@ def evaluate(model: nn.Module, p:Params, classifier_loss_fn, eval_loader: DataLo
     has_both_classes = len(set(y_true.tolist())) == 2
     auroc = roc_auc_score(y_true, y_probas) if has_both_classes else 0.0
 
-    # Precision-Recall Curve
-    pr_precision, pr_recall, pr_thresholds = precision_recall_curve(y_true, y_probas)
-    pr_f1 = 2 * pr_precision[:-1] * pr_recall[:-1] / (pr_precision[:-1] + pr_recall[:-1] + 1e-12)
-    best_f1 = pr_f1.max()
-    best_threshold = round(float(pr_thresholds[pr_f1.argmax()]), 4) if len(pr_thresholds) else 0.5
-
-    # Log figures every 5th epoch or on test set
+    # Log figures every 5th epoch or on final test set
     if (eval_type == "test") or ((epoch % 5 == 0) if epoch else False):
         _log_classifier_curves(
             y_true=y_true,
@@ -184,7 +182,7 @@ def evaluate(model: nn.Module, p:Params, classifier_loss_fn, eval_loader: DataLo
         "balanced_accuracy": balanced_accuracy,
         "specificity": specificity,
         "best_f1": best_f1,
-        "best_threshold": best_threshold,
+        "best_threshold": round(best_threshold, 4),
         "tp": tp,
         "tn": tn,
         "fp": fp,
@@ -322,6 +320,8 @@ def _log_classifier_curves(
     eval_type: str,
     epoch: int,
 ) -> None:
+
+    # Precision-Recall Curve
     pr_auc = auc(pr_recall, pr_precision)
     pr_fig, pr_ax = plt.subplots(figsize=(5, 4), dpi=120)
     pr_ax.plot(pr_recall, pr_precision, label=f"AUC={pr_auc:.4f}")
@@ -334,6 +334,7 @@ def _log_classifier_curves(
     pr_ax.grid(alpha=0.3)
     _log_figure_with_step(pr_fig, f"{eval_type}_precision_recall_curve", epoch)
 
+    # Reciever Operating Characteristic (ROC) curve
     roc_fig, roc_ax = plt.subplots(figsize=(5, 4), dpi=120)
     if has_both_classes:
         fpr, tpr, _ = roc_curve(y_true, y_probas)
@@ -351,13 +352,6 @@ def _log_classifier_curves(
 
 def _log_figure_with_step(fig, image_key: str, epoch: int) -> None:
     fig.tight_layout()
-    buffer = BytesIO()
-    fig.savefig(buffer, format="png")
-    buffer.seek(0)
-    image = Image.open(buffer).copy()
+    suffix = f"step_{epoch}" if epoch is not None else "final"
+    mlflow.log_figure(fig, f"images/{image_key}_{suffix}.png")
     plt.close(fig)
-
-    try:
-        mlflow.log_image(image, key=image_key, step=epoch)
-    except TypeError:
-        mlflow.log_image(image, artifact_file=f"{image_key}_epoch_{epoch:04d}.png")
