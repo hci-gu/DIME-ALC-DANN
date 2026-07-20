@@ -3,6 +3,7 @@ import mlflow
 import matplotlib
 import numpy as np
 import torch.nn as nn
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from time import time
@@ -21,7 +22,6 @@ from utils.focal_loss import MulticlassFocalLoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from sklearn.metrics import auc, roc_auc_score, roc_curve, precision_recall_curve
 
-matplotlib.use("Agg")
 
 
 def train(
@@ -49,7 +49,10 @@ def train(
 
         # Train pass
         model.train()
+        n_examples = 0
         train_loss = 0.0
+        n_correct_classifier = 0.0
+        n_correct_discriminator = 0.0
         for batch_idx, (x,y,s) in enumerate(tqdm(train_loader, desc="[Batch]", position=1, leave=False)):
             if p.dev_run and batch_idx > 3: break
 
@@ -61,6 +64,12 @@ def train(
 
             class_logits, speaker_logits = model(x, alpha=alpha)
 
+            # Classifier and Discriminator accuracy
+            n_correct_classifier += ((class_logits.squeeze(-1) >= 0.0) == y.to(torch.bool)).sum().item() # Naive 0.5 sigmoid-threshold 
+            n_correct_discriminator += (speaker_logits.argmax(dim=1) == s).sum().item()
+            n_examples += y.numel()
+
+            # Classifier and Discriminator loss
             classifier_loss = classifier_loss_fn(class_logits.squeeze(-1), y)
             discriminator_loss = discriminator_loss_fn(speaker_logits, s)
 
@@ -73,17 +82,29 @@ def train(
             t_batch_time = time() - t_batch_start
 
             global_step = epoch * len(train_loader) + batch_idx
-            mlflow.log_metrics({
+            mlflow.log_metrics(
+                {
                 "batch_time": t_batch_time,
                 "train_batch_classifier_loss": classifier_loss.item(),
                 "train_batch_discriminator_loss": discriminator_loss.item(),
                 "train_batch_loss": loss.item()
-            }, step=global_step
+                },
+                step=global_step
             )
         train_loss = train_loss / len(train_loader)
+        classifier_accuracy = n_correct_classifier / n_examples
+        discriminator_accuracy = n_correct_discriminator / n_examples
+        mlflow.log_metrics(
+            {
+            "train_loss": train_loss,
+            "classifier_accuracy": classifier_accuracy,
+            "discriminator_accuracy": discriminator_accuracy
+            },
+            step=epoch
+        )
 
-        # Validation step
-        val_metrics = evaluate(model, p, classifier_loss_fn, val_loader, device, epoch=epoch)
+        # Train & Validation evaluation
+        val_metrics = evaluate(model, p, classifier_loss_fn, val_loader, device, epoch=epoch, eval_type="val")
 
         # Log metrics
         mlflow.log_metrics(val_metrics, step=epoch)
@@ -158,12 +179,13 @@ def evaluate(model: nn.Module, p:Params, classifier_loss_fn, eval_loader: DataLo
     auroc = roc_auc_score(y_true, y_probas) if has_both_classes else 0.0
 
     # Log figures every 5th epoch or on final test set
-    if (eval_type == "test") or ((epoch % 5 == 0) if epoch else False):
-        _log_classifier_curves(
+    if (eval_type == "test") or (epoch is not None and epoch % 5 == 0):
+        log_evaluation_figures(
             y_true=y_true,
             y_probas=y_probas,
             pr_precision=pr_precision,
             pr_recall=pr_recall,
+            confusion_matrix=(tp, tn, fp, fn),
             auroc=auroc,
             has_both_classes=has_both_classes,
             eval_type=eval_type,
@@ -310,16 +332,43 @@ def objective(trial: Trial, train_data, val_data, d_discriminator: int, pos_weig
 
 ### HELPER FUNCTIONS ### 
 
-def _log_classifier_curves(
+def log_evaluation_figures(
     y_true,
     y_probas,
     pr_precision,
     pr_recall,
+    confusion_matrix: tuple[int, int, int, int],
     auroc: float,
     has_both_classes: bool,
     eval_type: str,
     epoch: int,
 ) -> None:
+
+    # Confusion Matrix
+    tp, tn, fp, fn = confusion_matrix
+    matrix = np.array([[tn, fp], [fn, tp]])
+    cm_fig, cm_ax = plt.subplots(figsize=(5, 4), dpi=120)
+    image = cm_ax.imshow(matrix, cmap="Blues")
+    cm_fig.colorbar(image, ax=cm_ax)
+    cm_ax.set(
+        title=f"{eval_type} confusion matrix",
+        xlabel="Predicted label",
+        ylabel="True label",
+        xticks=[0, 1],
+        yticks=[0, 1],
+        xticklabels=["Sober", "Intoxicated"],
+        yticklabels=["Sober", "Intoxicated"],
+    )
+    for row, column in np.ndindex(matrix.shape):
+        cm_ax.text(
+            column,
+            row,
+            matrix[row, column],
+            ha="center",
+            va="center",
+            color="white" if matrix[row, column] > matrix.max() / 2 else "black",
+        )
+    _log_figure_with_step(cm_fig, f"{eval_type}_confusion_matrix", epoch)
 
     # Precision-Recall Curve
     pr_auc = auc(pr_recall, pr_precision)
@@ -352,6 +401,6 @@ def _log_classifier_curves(
 
 def _log_figure_with_step(fig, image_key: str, epoch: int) -> None:
     fig.tight_layout()
-    suffix = f"step_{epoch}" if epoch is not None else "final"
+    suffix = f"epoch_{epoch}" if epoch is not None else "final"
     mlflow.log_figure(fig, f"images/{image_key}_{suffix}.png")
     plt.close(fig)
