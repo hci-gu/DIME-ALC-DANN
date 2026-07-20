@@ -54,6 +54,7 @@ def train(
         train_loss = 0.0
         for batch_idx, (x,y,s) in enumerate(tqdm(train_loader, desc="[Batch]", position=1, leave=False)):
             if p.dev_run and batch_idx > 3: break
+
             t_batch_start = time()
             x = x.to(device)
             y = y.to(device, dtype=torch.float32) # class label (intoxicated vs sober)
@@ -103,7 +104,7 @@ def train(
     stopping_criterion.load_best_model(model)
     t_tot = (time() - t_start) / 60.0
     print(f"Finished training after {t_tot:.1f} minutes at epoch {1+epoch}")
-    mlflow.log_metric("training_time", t_tot)
+    mlflow.log_metric("training_time_minutes", t_tot)
 
 
 @torch.no_grad()

@@ -100,7 +100,7 @@ class ALCData(Dataset):
 
         self.class_labels = torch.tensor(self.class_labels, dtype=torch.int64)
         self.len = len(self.class_labels)
-    
+
 
     def cache(self, train_indices=None):
 
@@ -151,7 +151,7 @@ class ALCData(Dataset):
 
         # Calculate mu, sigma based on train indices
         feature_tensor = torch.stack([self.cache_dict[file] for file in self.files])
-        train_features = feature_tensor if train_indices is None else feature_tensor[train_indices]
+        train_features = feature_tensor if (train_indices is None) else feature_tensor[train_indices]
         self.mu = train_features.mean(dim=0)
         self.sigma = train_features.std(dim=0)
     
@@ -166,6 +166,7 @@ class ALCData(Dataset):
             raise ValueError("Cannot calculate pos_weight with zero positive samples")
         return (n_neg / n_pos).float()
     
+
     def speaker_split(
         self,
         train_frac: float = 0.8,
@@ -221,8 +222,10 @@ class ALCData(Dataset):
             "test_speakers": sorted(self.test_speakers_id),
         }
 
+
     def __len__(self):
         return self.len
+
 
     def __getitem__(self, index):
         audio_file = self.files[index]
@@ -261,6 +264,8 @@ class ALCData(Dataset):
             id_list.append(s)
             file_list.append(self.files[idx])
         return torch.stack(x_list, dim=0), torch.stack(y_list, dim=0), torch.tensor(id_list), file_list
+
+
 
 if __name__ == "__main__":
 
