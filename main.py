@@ -83,7 +83,7 @@ def main():
             # Perform HPO
             sampler = optuna.samplers.TPESampler(seed=SEED, n_startup_trials=N_WARMUP_TRIALS, multivariate=True)
             study = optuna.create_study(direction="maximize", sampler=sampler, study_name="dann_alc")
-            objective_fn = partial(objective, train_data=train_data, val_data=val_data, d_discriminator=p.discriminator_output_dimension, pos_weight=pos_weight)
+            objective_fn = partial(objective, train_data=train_data, val_data=val_data, base_params=p, pos_weight=pos_weight)
             study.optimize(objective_fn, n_trials=N_TRIALS, timeout=TIMEOUT_IN_SECONDS, catch=(torch.cuda.OutOfMemoryError))
 
             completed, failed, pruned = filter_study(study)

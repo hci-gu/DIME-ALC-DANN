@@ -13,8 +13,8 @@ from optuna import Trial
 from params import Params
 from typing import Literal
 from functools import partial
-from dataclasses import asdict
 from torch import optim, Tensor
+from dataclasses import asdict, replace
 from torch.utils.data import DataLoader
 from torchvision.ops import sigmoid_focal_loss
 from utils.early_stopping import EarlyStopping
@@ -215,21 +215,24 @@ def evaluate(model: nn.Module, p:Params, classifier_loss_fn, eval_loader: DataLo
     return {f"{eval_type}/{key}": value for (key,value) in metrics.items()}
 
 
-def objective(trial: Trial, train_data, val_data, d_discriminator: int, pos_weight):
+def objective(trial: Trial, train_data, val_data, base_params: Params, pos_weight):
 
     # HPO parameters
     learning_rate = trial.suggest_float("learning_rate", 1e-5, 3e-3, log=True)
     weight_decay = trial.suggest_float("weight_decay", 1e-7, 1e-3, log=True)
     batch_size = trial.suggest_categorical("batch_size", [16, 24, 32])
-    classifier_loss_fn_str = trial.suggest_categorical("classifier_loss_fn", ["BCEWithLogitsLoss", "FocalLoss"])  
-    discriminator_loss_fn_str = trial.suggest_categorical("discriminator_loss_fn", ["CrossEntropyLoss", "FocalLoss"])  
+    classifier_loss_fn_str = trial.suggest_categorical("loss_fn_classifier", ["BCEWithLogitsLoss", "FocalLoss"])  
+    discriminator_loss_fn_str = trial.suggest_categorical("loss_fn_discriminator", ["CrossEntropyLoss", "FocalLoss"])  
     optimizer_str = trial.suggest_categorical("optimizer", ["AdamW", "Adam", "SGD", "RMSprop"])
 
     # Param class
-    p = Params(
+    p = replace(
+        base_params,
         batch_size=batch_size,
         optimizer_lr=learning_rate,
-        discriminator_output_dimension=d_discriminator
+        optimizer=optimizer_str,
+        loss_fn_classifier=classifier_loss_fn_str,
+        loss_fn_discriminator=discriminator_loss_fn_str,
     )
 
     device = torch.device(p.device)
@@ -292,7 +295,8 @@ def objective(trial: Trial, train_data, val_data, d_discriminator: int, pos_weig
     # Classifier Loss Function
     if classifier_loss_fn_str == "BCEWithLogitsLoss":
         use_pos_weight = trial.suggest_categorical("use_pos_weight", [True, False])
-        pos_weight = pos_weight.to(device)
+        if pos_weight is not None:
+            pos_weight = pos_weight.to(device)
         classifier_loss_fn = nn.BCEWithLogitsLoss(pos_weight=(pos_weight if use_pos_weight else None))
     elif classifier_loss_fn_str == "FocalLoss":
         classifier_alpha = trial.suggest_float("classifier_alpha", 0.05, 0.9)
@@ -387,7 +391,7 @@ def log_evaluation_figures(
     pr_ax.grid(alpha=0.3)
     _log_figure_with_step(pr_fig, f"{eval_type}_precision_recall_curve", epoch)
 
-    # Reciever Operating Characteristic (ROC) curve
+    # Receiver Operating Characteristic (ROC) curve
     roc_fig, roc_ax = plt.subplots(figsize=(5, 4), dpi=120)
     if has_both_classes:
         fpr, tpr, _ = roc_curve(y_true, y_probas)

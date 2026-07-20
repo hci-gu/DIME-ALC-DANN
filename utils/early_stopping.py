@@ -2,7 +2,7 @@ import copy
 
 class EarlyStopping():
 
-    def __init__(self, patience=None, min_delta=0, restore_best_weights=True, mode="max"):
+    def __init__(self, patience=None, min_delta=0, mode="max"):
 
         assert mode in ["max","min"], f"Invalid mode: {mode}"
 
@@ -10,7 +10,6 @@ class EarlyStopping():
         self.mode = mode
         self.sign = 1 if mode == "max" else -1
         self.min_delta = min_delta
-        self.restore_best_weights = restore_best_weights
         self.best_model = None
         self.best_score = None
         self.counter = 0
@@ -40,8 +39,7 @@ class EarlyStopping():
         else: # Increment counter and check termination
             self.counter += 1
             if (self.patience is not None) and (self.counter >= self.patience):
-                if self.restore_best_weights:
-                    model.load_state_dict(self.best_model.state_dict())
+                model.load_state_dict(self.best_model.state_dict())
                 return True
         return False
     

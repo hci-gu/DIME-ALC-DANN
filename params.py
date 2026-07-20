@@ -1,7 +1,5 @@
-import os
-import json
 import torch
-from dataclasses import dataclass, field, fields, asdict
+from dataclasses import dataclass, field, fields
 
 @dataclass()
 class Params():
@@ -19,7 +17,6 @@ class Params():
     # Early stopping
     early_stopping_patience: int | None = 30
     early_stopping_min_delta: float = 0.0 
-    early_stopping_restore_best_weights: bool = True
     early_stopping_mode: str = "max"
 
     # Optimizer
