@@ -20,7 +20,9 @@ def main():
     save_model = True
     torch.manual_seed(SEED)
 
-    p = Params()
+    p = Params(
+        early_stopping_patience=None
+    )
 
     # Mlflow tracking
     experiment_name = "Baseline MLP"
@@ -59,7 +61,7 @@ def main():
     # Load model
     model_config = {
         "input_dimension": 6373,
-        "hidden_dimension": 512,
+        "hidden_dimension": 128,
         "output_dimension": 1,
         "p_dropout": 0.5,
     }
