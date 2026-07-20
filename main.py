@@ -77,9 +77,6 @@ def main():
                 "optuna_seed": SEED
             })
 
-            # Log parameters
-            mlflow.log_params(asdict(p))
-
             # Log data metadata
             mlflow.log_dict(data.get_split_speakers(),"speaker_data_split.json")
 
