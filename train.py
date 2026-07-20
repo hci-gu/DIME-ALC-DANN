@@ -311,8 +311,8 @@ def objective(trial: Trial, train_data, val_data, d_discriminator: int, pos_weig
     with mlflow.start_run(run_name=f"Trial_{trial.number}", nested=True):
 
         # Log trial params
-        p |= trial.params # Overwrite with trial parameters
-        mlflow.log_params(p)
+        merged_p = asdict(p) | trial.params # Overwrite with trial parameters
+        mlflow.log_params(merged_p)
         
         train(
             model=model,
