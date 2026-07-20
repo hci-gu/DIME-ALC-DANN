@@ -63,6 +63,7 @@ def main():
     # Do we perform HPO or not
     if args.hpo:
         with mlflow.start_run(run_name="HPO", tags={"run_type": "hpo"}):
+
             # HPO parameters
             N_TRIALS = 100
             N_WARMUP_TRIALS = 10
@@ -84,7 +85,7 @@ def main():
 
             # Perform HPO
             sampler = optuna.samplers.TPESampler(seed=SEED, n_startup_trials=N_WARMUP_TRIALS, multivariate=True)
-            study = optuna.create_study(direction="minimize", sampler=sampler, study_name="dann_alc")
+            study = optuna.create_study(direction="maximize", sampler=sampler, study_name="dann_alc")
             objective_fn = partial(objective, train_data=train_data, val_data=val_data, d_discriminator=p.discriminator_output_dimension, pos_weight=pos_weight)
             study.optimize(objective_fn, n_trials=N_TRIALS, timeout=TIMEOUT_IN_SECONDS, catch=(torch.cuda.OutOfMemoryError))
 
@@ -106,7 +107,7 @@ def main():
             # Select the best trial parameters
             best_trial = study.best_trial
 
-            mlflow.log_param("hpo/best_trial_number", best_trial.number)
+            mlflow.log_metric("hpo/best_trial_number", best_trial.number)
             mlflow.log_metric("hpo/best_objective", float(best_trial.value))
             mlflow.log_params({
                 f"hpo/best_{name}": value

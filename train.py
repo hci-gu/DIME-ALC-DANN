@@ -13,6 +13,7 @@ from optuna import Trial
 from params import Params
 from typing import Literal
 from functools import partial
+from dataclasses import asdict
 from torch import optim, Tensor
 from torch.utils.data import DataLoader
 from torchvision.ops import sigmoid_focal_loss
@@ -231,6 +232,9 @@ def objective(trial: Trial, train_data, val_data, d_discriminator: int, pos_weig
         discriminator_output_dimension=d_discriminator
     )
 
+    # Log parameters
+    mlflow.log_params(asdict(p))
+
     device = torch.device(p.device)
 
     # DataLoaders
@@ -310,6 +314,10 @@ def objective(trial: Trial, train_data, val_data, d_discriminator: int, pos_weig
     with mlflow.start_run(run_name=f"Trial_{trial.number}", nested=True):
 
         mlflow.log_params(trial.params)
+        
+        # Overwrite default param values with HPO params and log to mlflow
+        p.from_optional_overrides(trial.params)
+        mlflow.log_params(asdict(p))
 
         train(
             model=model,
