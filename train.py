@@ -310,12 +310,10 @@ def objective(trial: Trial, train_data, val_data, d_discriminator: int, pos_weig
 
     with mlflow.start_run(run_name=f"Trial_{trial.number}", nested=True):
 
-        mlflow.log_params(trial.params)
+        # Log trial params
+        p |= trial.params # Overwrite with trial parameters
+        mlflow.log_params(p)
         
-        # Overwrite default param values with HPO params and log to mlflow
-        p.from_optional_overrides(**trial.params)
-        mlflow.log_params(asdict(p))
-
         train(
             model=model,
             p=p,
