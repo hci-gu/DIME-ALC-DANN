@@ -1,4 +1,5 @@
 import torch
+import random
 import mlflow
 import matplotlib
 import numpy as np
@@ -23,6 +24,13 @@ from utils.focal_loss import MulticlassFocalLoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from sklearn.metrics import auc, roc_auc_score, roc_curve, precision_recall_curve
 
+def seed_everything(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 def train(
@@ -181,7 +189,7 @@ def evaluate(model: nn.Module, p:Params, classifier_loss_fn, eval_loader: DataLo
     auroc = roc_auc_score(y_true, y_probas) if has_both_classes else 0.0
 
     # Log figures every 5th epoch or on final test set
-    if (eval_type == "test") or (epoch is not None and epoch % 5 == 0):
+    if (eval_type == "test") or (epoch is not None and epoch % 25 == 0):
         log_evaluation_figures(
             y_true=y_true,
             y_probas=y_probas,
@@ -217,6 +225,8 @@ def evaluate(model: nn.Module, p:Params, classifier_loss_fn, eval_loader: DataLo
 
 def objective(trial: Trial, train_data, val_data, base_params: Params, pos_weight):
 
+    seed_everything(base_params.seed)
+
     # HPO parameters
     learning_rate = trial.suggest_float("learning_rate", 1e-5, 3e-3, log=True)
     weight_decay = trial.suggest_float("weight_decay", 1e-7, 1e-3, log=True)
@@ -234,6 +244,7 @@ def objective(trial: Trial, train_data, val_data, base_params: Params, pos_weigh
         loss_fn_classifier=classifier_loss_fn_str,
         loss_fn_discriminator=discriminator_loss_fn_str,
     )
+
 
     device = torch.device(p.device)
 

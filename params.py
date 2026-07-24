@@ -5,13 +5,14 @@ from dataclasses import dataclass, field, fields
 class Params():
 
     dev_run: bool = False # True when developing and doing quick iterations
+    seed: int = 1999
 
     # Training params
     n_epochs: int = 100
     batch_size: int = 128
     n_workers: int = 1
     device: str = field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
-    optim_metric: str = "val/f1"
+    optim_metric: str = "val/auroc"
     pin_memory: bool = field(default_factory=lambda: torch.cuda.is_available())
 
     # Early stopping

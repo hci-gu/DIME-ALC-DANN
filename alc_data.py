@@ -151,6 +151,9 @@ class ALCData(Dataset):
 
         # Calculate mu, sigma based on train indices
         feature_tensor = torch.stack([self.cache_dict[file] for file in self.files])
+        if not torch.isfinite(feature_tensor).all():
+            raise RuntimeError("OpenSMILE features contain NaN or infinite values")
+
         train_features = feature_tensor if (train_indices is None) else feature_tensor[train_indices]
         self.mu = train_features.mean(dim=0)
         self.sigma = train_features.std(dim=0)
@@ -209,6 +212,17 @@ class ALCData(Dataset):
                 test_indices.append(idx)
             else:
                 raise RuntimeError(f"Could not assign speaker ID: {speaker_id} to a split")
+
+        expected_classes = set(self.class_mapping.values())
+        for split_name, indices in (
+            ("train", train_indices),
+            ("validation", val_indices),
+            ("test", test_indices),
+        ):
+            present_classes = set(self.class_labels[indices].tolist())
+            if present_classes != expected_classes:
+                missing_classes = sorted(expected_classes - present_classes)
+                raise RuntimeError(f"{split_name} split is missing classes: {missing_classes}")
 
         self.is_split = True
         return train_indices, val_indices, test_indices

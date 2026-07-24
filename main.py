@@ -60,17 +60,17 @@ def main():
     val_loader = DataLoader(val_data, p.batch_size, shuffle=False, num_workers=p.n_workers, pin_memory=p.pin_memory)
     test_loader = DataLoader(test_data, p.batch_size, shuffle=False, num_workers=p.n_workers, pin_memory=p.pin_memory)
 
-    # Do we perform HPO or not
-    if args.hpo:
+    if args.hpo: # Perform HPO
+
         with mlflow.start_run(run_name="HPO", tags={"run_type": "hpo"}):
 
             # HPO parameters
             N_TRIALS = 100
             N_WARMUP_TRIALS = 10
-            TIMEOUT_IN_SECONDS = int(60 * 60 * 24 * 2.0)  # 2 Days in seconds
-            SEED = 1999
+            TIMEOUT_IN_SECONDS = int(60 * 60 * 24 * 4.0)  # 4 Days in seconds
 
             mlflow.log_params({
+                "dev_run": p.dev_run,
                 "n_trials": N_TRIALS,
                 "n_warmup_trials": N_WARMUP_TRIALS,
                 "timeout": TIMEOUT_IN_SECONDS,
@@ -86,6 +86,7 @@ def main():
             objective_fn = partial(objective, train_data=train_data, val_data=val_data, base_params=p, pos_weight=pos_weight)
             study.optimize(objective_fn, n_trials=N_TRIALS, timeout=TIMEOUT_IN_SECONDS, catch=(torch.cuda.OutOfMemoryError))
 
+            # Analyze study trials
             completed, failed, pruned = filter_study(study)
 
             mlflow.log_metrics({
@@ -119,7 +120,7 @@ def main():
                 "hpo/best_trial.json",
             )
 
-    else:
+    else: # Regular training
 
         # Load model
         model = DANN(p)
@@ -161,6 +162,7 @@ def main():
                 model.to("cpu")
                 run_name = mlflow.active_run().data.tags["mlflow.runName"].replace(" ", "_").replace("/", "_").replace("\\", "_")
                 save_path = os.path.join("weights",f"dann_model-{run_name}.pth")
+                os.makedirs("weights", exist_ok=True)
                 torch.save(model, save_path)
                 print(f"Saved model to: {save_path}")
         
