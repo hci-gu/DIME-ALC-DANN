@@ -70,6 +70,7 @@ def main():
             TIMEOUT_IN_SECONDS = int(60 * 60 * 24 * 4.0)  # 4 Days in seconds
 
             mlflow.log_params({
+                "optim_metric": p.optim_metric,
                 "dev_run": p.dev_run,
                 "n_trials": N_TRIALS,
                 "n_warmup_trials": N_WARMUP_TRIALS,
