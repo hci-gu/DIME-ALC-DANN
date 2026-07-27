@@ -21,7 +21,7 @@ class Params():
     early_stopping_mode: str = "max"
 
     # Optimizer
-    optimizer: str = "Adam"
+    optimizer: str = "RMSprop"
     optimizer_lr: float = 0.001
 
     # Loss funtions
