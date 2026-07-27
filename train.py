@@ -227,7 +227,7 @@ def objective(trial: Trial, train_data, val_data, base_params: Params, pos_weigh
     # HPO parameters
     learning_rate = trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True)
     weight_decay = trial.suggest_float("weight_decay", 1e-7, 1e-3, log=True)
-    batch_size = trial.suggest_categorical("batch_size", [32, 64, 128, 256])
+    batch_size = trial.suggest_categorical("batch_size", [32, 64, 128, 256, 512])
 
     # Param class
     p = replace(

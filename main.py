@@ -65,8 +65,8 @@ def main():
         with mlflow.start_run(run_name="HPO", tags={"run_type": "hpo"}):
 
             # HPO parameters
-            N_TRIALS = 100
-            N_WARMUP_TRIALS = 10
+            N_TRIALS = 200
+            N_WARMUP_TRIALS = 20
             TIMEOUT_IN_SECONDS = int(60 * 60 * 24 * 4.0)  # 4 Days in seconds
 
             mlflow.log_params({
