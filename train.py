@@ -45,7 +45,7 @@ def train(
     classifier_loss_fn, discriminator_loss_fn = loss_functions # Unpack loss functions
 
 
-    print(f"Started training with device: {p.device}")
+    if p.verbose: print(f"Started training with device: {p.device}")
     t_start = time()
     train_pbar = tqdm(range(p.n_epochs), desc="Training", position=0)
     for epoch in train_pbar:
@@ -120,7 +120,7 @@ def train(
         scheduler.step(val_metrics[p.optim_metric])
 
         # Update tqdm bar
-        train_pbar.set_description_str(f"Training L_tot_tr={train_loss:.4f}|L_clf_val={val_metrics["val/classifier_loss"]:.4f}")
+        train_pbar.set_description_str(f"[Training] Train L = {train_loss:.4f}| {p.optim_metric} = {val_metrics[p.optim_metric]:.4f}")
 
         # Check early stopping
         if stopping_criterion(model, val_metrics[p.optim_metric]):
@@ -129,7 +129,7 @@ def train(
 
     stopping_criterion.load_best_model(model)
     t_tot = (time() - t_start) / 60.0
-    print(f"Finished training after {t_tot:.1f} minutes at epoch {1+epoch}")
+    if p.verbose: print(f"Finished training after {t_tot:.1f} minutes at epoch {1+epoch}")
     mlflow.log_metric("training_time_minutes", t_tot)
 
 
@@ -285,7 +285,7 @@ def objective(trial: Trial, train_data, val_data, base_params: Params, pos_weigh
     # Discriminator Loss Function
     discriminator_loss_fn = nn.CrossEntropyLoss(label_smoothing=p.label_smoothing)
 
-    with mlflow.start_run(run_name=f"Trial_{trial.number}", nested=True):
+    with mlflow.start_run(run_name=f"Trial_{trial.number}", nested=True, tags={"run_type": "hpo_trial"}):
 
         # Log trial params
         merged_p = asdict(p) | trial.params # Overwrite with trial parameters

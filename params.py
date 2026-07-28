@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, fields
 class Params():
 
     dev_run: bool = False # True when developing and doing quick iterations
+    verbose: bool = False
     seed: int = 1999
 
     # Training params

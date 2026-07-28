@@ -28,6 +28,7 @@ def main():
     else:
         max_samples = (1000 if p.dev_run else None)
     verbose = args.verbose
+    run_name = args.run_name
     SEED = args.seed
 
     # Mlflow tracking
@@ -39,7 +40,7 @@ def main():
     device = torch.device(p.device)
 
     # Load data
-    print(f"Loading data...")
+    if p.verbose: print(f"Loading data...")
     data = ALCData(
         max_samples=max_samples,
         seed=SEED,
@@ -62,12 +63,13 @@ def main():
 
     if args.hpo: # Perform HPO
 
-        with mlflow.start_run(run_name="HPO", tags={"run_type": "hpo"}):
+        with mlflow.start_run(run_name=run_name, tags={"run_type": "hpo"}):
 
             # HPO parameters
             N_TRIALS = 400
             N_WARMUP_TRIALS = 60
-            TIMEOUT_IN_SECONDS = int(60 * 60 * 24 * 6.0)  # 4 Days in seconds
+            DAY_BUDGET = 6.0 # Number of days we limit HPO
+            TIMEOUT_IN_SECONDS = int(60 * 60 * 24 * DAY_BUDGET)  # In seconds
 
             mlflow.log_params({
                 "optim_metric": p.optim_metric,
@@ -136,7 +138,7 @@ def main():
         discriminator_loss_fn = nn.CrossEntropyLoss()
         loss_functions = (classifier_loss_fn, discriminator_loss_fn)
 
-        with mlflow.start_run():
+        with mlflow.start_run(run_name=run_name, tags={"run_type": "normal"}):
 
             # Log parameters
             mlflow.log_params(asdict(p))
