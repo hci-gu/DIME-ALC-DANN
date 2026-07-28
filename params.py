@@ -22,12 +22,16 @@ class Params():
 
     # Optimizer
     optimizer: str = "RMSprop"
-    optimizer_lr: float = 0.001
+    optimizer_lr: float = 5.67e-5
+    optimizer_alpha: float = 0.995
+    optimizer_momentum: float = 0.65
+    optimizer_weight_decay: float = 5e-4
 
     # Loss funtions
     use_pos_weight: bool = True
     loss_fn_classifier: str = "BCEWithLogitsLoss"
     loss_fn_discriminator: str = "CrossEntropyLoss"
+    label_smoothing: float = 0.15
 
     # Scheduler
     scheduler: str = "ReduceLROnPlateau"
@@ -56,7 +60,7 @@ class Params():
     discriminator_n_layers: int = 5
     discriminator_output_dimension: int = 10
     discriminator_activation_function: str = "relu"
-    discriminator_p_dropout: float = 0.0
+    discriminator_p_dropout: float = 0.4
 
     @classmethod
     def from_optional_overrides(cls, **overrides):

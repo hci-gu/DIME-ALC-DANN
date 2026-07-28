@@ -185,7 +185,7 @@ def evaluate(model: nn.Module, p:Params, classifier_loss_fn, eval_loader: DataLo
     has_both_classes = len(set(y_true.tolist())) == 2
     auroc = roc_auc_score(y_true, y_probas) if has_both_classes else 0.0
 
-    # Log figures every 5th epoch or on final test set
+    # Log figures every 25th epoch or on final test set
     if (eval_type == "test") or (epoch is not None and epoch % 25 == 0):
         log_evaluation_figures(
             y_true=y_true,
@@ -225,15 +225,40 @@ def objective(trial: Trial, train_data, val_data, base_params: Params, pos_weigh
     seed_everything(base_params.seed)
 
     # HPO parameters
-    learning_rate = trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True)
-    weight_decay = trial.suggest_float("weight_decay", 1e-7, 1e-3, log=True)
-    batch_size = trial.suggest_categorical("batch_size", [32, 64, 128, 256, 512])
+    batch_size = trial.suggest_categorical("batch_size", [512, 1024, 2048])
+
+    extractor_n_layers = trial.suggest_int("extractor_n_layers", low=1, high=5)
+    extractor_hidden_dimension = trial.suggest_categorical("extractor_hidden_dimension", [64,128,256,512])
+    extractor_output_dimension = trial.suggest_categorical("extractor_output_dimension", [64,128,256,512,1024])
+
+    classifier_n_layers = trial.suggest_int("classifier_n_layers", low=1, high=5)
+    classifier_hidden_dimension = trial.suggest_categorical("classifier_hidden_dimension", [64,128,256,512])
+
+    discriminator_n_layers = trial.suggest_int("discriminator_n_layers", low=1, high=5)
+    discriminator_hidden_dimension = trial.suggest_categorical("discriminator_hidden_dimension", [64,128,256,512])
+
+    activation_function = trial.suggest_categorical("activation_function", ["relu", "leaky_relu", "gelu", "tanh", "sigmoid"])
+    p_dropout = trial.suggest_float("p_dropout", 0, 0.5)
 
     # Param class
     p = replace(
         base_params,
         batch_size=batch_size,
-        optimizer_lr=learning_rate,
+        extractor_activation_function=activation_function,
+        classifier_activation_function=activation_function,
+        discriminator_activation_function=activation_function,
+        extractor_p_dropout=p_dropout,
+        classifier_p_dropout=p_dropout,
+        discriminator_p_dropout=p_dropout,
+        extractor_n_layers=extractor_n_layers,
+        extractor_hidden_dimension=extractor_hidden_dimension,
+        extractor_output_dimension=extractor_output_dimension,
+        classifier_input_dimension=extractor_output_dimension, # need to re-overwrite again
+        discriminator_input_dimension=extractor_output_dimension, # need to re-overwrite again
+        classifier_n_layers=classifier_n_layers,
+        classifier_hidden_dimension=classifier_hidden_dimension,
+        discriminator_n_layers=discriminator_n_layers,
+        discriminator_hidden_dimension=discriminator_hidden_dimension
     )
 
     device = torch.device(p.device)
@@ -247,16 +272,10 @@ def objective(trial: Trial, train_data, val_data, base_params: Params, pos_weigh
     model.to(device)
 
     # Optimizer
-    alpha = trial.suggest_float("rmsprop_alpha", 0.98, 0.999)
-    momentum = trial.suggest_float("rmsprop_momentum", 0, 0.8)
     optimizer = torch.optim.RMSprop(
         model.parameters(),
-        lr=learning_rate,
-        weight_decay=weight_decay,
-        alpha=alpha,
-        momentum=momentum
+        **p.get_vars_from_prefix("optimizer")
     )
-
 
     # Classifier Loss Function
     if pos_weight is not None:
@@ -264,10 +283,7 @@ def objective(trial: Trial, train_data, val_data, base_params: Params, pos_weigh
     classifier_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     
     # Discriminator Loss Function
-    label_smoothing = trial.suggest_float("label_smoothing", 0, 0.5)
-    discriminator_loss_fn = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
-
-    loss_functions = (classifier_loss_fn, discriminator_loss_fn)
+    discriminator_loss_fn = nn.CrossEntropyLoss(label_smoothing=p.label_smoothing)
 
     with mlflow.start_run(run_name=f"Trial_{trial.number}", nested=True):
 
@@ -279,7 +295,7 @@ def objective(trial: Trial, train_data, val_data, base_params: Params, pos_weigh
             model=model,
             p=p,
             optimizer=optimizer,
-            loss_functions=loss_functions,
+            loss_functions=(classifier_loss_fn, discriminator_loss_fn),
             train_loader=train_loader,
             val_loader=val_loader
         )
