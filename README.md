@@ -15,7 +15,7 @@ uv sync --extra cuda
 ## Mlflow (remote serving)
 Serve the model on remote machine
 ``` bash
- uv run mlflow server --host 127.0.0.1 --port 5000
+uv run mlflow server --host 127.0.0.1 --port 5000
 ```
 
 Create a temporary port forward on your local machine
