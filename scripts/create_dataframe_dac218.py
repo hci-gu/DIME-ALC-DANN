@@ -100,4 +100,4 @@ data_df = pd.DataFrame([asdict(data_obj) for data_obj in data_dict.values()])
 print(data_df.head(15))
 
 if not dry_run:
-    data_df.to_csv(osp.join(ROOT_DIR,"dac218_samples.csv"), index=False)
+    data_df.to_csv(osp.join(ROOT_DIR,"dac218_data.csv"), index=False)
