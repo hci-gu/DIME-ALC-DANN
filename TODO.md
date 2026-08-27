@@ -1,0 +1,3 @@
+- in both ALC & DAC dataset, see if we can separate mu,sigma logic from cache() method
+- start working on fine-tuning script
+- in test evaluation add plot for BAC Vs p(drunk) for classifier
