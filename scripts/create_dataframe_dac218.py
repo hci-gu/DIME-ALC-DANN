@@ -77,7 +77,7 @@ for wav_file in tqdm(wav_files): # example file: spk674-sess01a-utt0001
     # Assertions
     
     # Store data sample instance
-    data_dict[id] = DataObject(
+    data_dict[Path(wav_file).stem] = DataObject(
         id=id,
         wav_file=wav_file,
         speaker_id=speaker_id,
