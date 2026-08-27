@@ -1,12 +1,14 @@
 import os
 import json
 import torch
+import random
 import opensmile
 import numpy as np
 import os.path as osp
 
 from time import time
 from tqdm import tqdm
+from pathlib import Path
 from torch.utils.data import Dataset, Subset
 
 
@@ -22,9 +24,9 @@ class DAC218Data(Dataset):
         ):
         super().__init__()
 
-        self.ROOT = data_path if data_path else osp.join("data","ALC")
-        self.AUDIO_PATH = osp.join(self.ROOT,"wav","h")
-        self.LABELS_PATH = osp.join(self.ROOT,"labels","h")
+        self.ROOT = data_path if data_path else osp.join("data","SE-DAC218")
+        self.AUDIO_PATH = osp.join(self.ROOT,"audio","wav")
+        self.LABELS_PATH = osp.join(self.ROOT,"labels","labels.json")
         self.processor = opensmile.Smile(
             feature_set=opensmile.FeatureSet.ComParE_2016,
             feature_level=opensmile.FeatureLevel.Functionals,
@@ -47,53 +49,37 @@ class DAC218Data(Dataset):
 
         # Read in all files from paths
         self.audio_files = sorted([file for file in os.listdir(self.AUDIO_PATH) if file.endswith(".wav")])
-        self.label_files = sorted([file for file in os.listdir(self.LABELS_PATH) if file.endswith(".json")])
-        assert len(self.audio_files) == len(self.label_files), "Mismatch in number of audio and label files"
 
-        label_stems = {label_file.removesuffix("_annot.json"): label_file for label_file in self.label_files} 
+        with open(osp.join(self.LABELS_PATH)) as file:
+            labels = json.load(file)
+        labels = {x["id"]: x["label"] for x in labels}
 
-        # Order independent audio <-> label file mapping
-        audio_label_mapping = {} # 0061006001_h_00.wav -> 0061006001_h_00_annot.json
-        for audio_file in self.audio_files:
-            audio_stem: str = audio_file.removesuffix(".wav")
-            if audio_stem not in label_stems:
-                raise RuntimeError(f"Unmatched audio file: {audio_file}")
-            audio_label_mapping[audio_file] = label_stems[audio_stem] 
-        
-        matched_audio_files = list(audio_label_mapping.keys())
+        assert all([(Path(wav_file).stem[:-8] in labels) for wav_file in self.audio_files]), f""
+
+        self.labels = labels
+
         if self.max_samples:
-            generator = torch.Generator().manual_seed(self.seed)
-            perm = torch.randperm(len(matched_audio_files), generator=generator).tolist()
-            matched_audio_files = [matched_audio_files[i] for i in perm]
-            matched_audio_files = matched_audio_files[:self.max_samples]
+            random.seed(self.seed)
+            random.shuffle(self.audio_files)
+            self.audio_files = self.audio_files[:self.max_samples]
 
-        if self.verbose:
-            print(f"Loaded in {len(matched_audio_files)} files ({len(self.audio_files)} total)")
-        
-        self.files = [] # 0061006001_h_00.wav
+        self.files = [] # spk674-sess01a-utt0001.wav
         self.class_labels = [] # 0 (NA), 1 (A)
         self.speaker_id_to_index = {} # speaker_id : speaker_index (used to map random speakerID to 0,1,2,...,n_speakers-1)
         self.speaker_ids = [] # list of speaker ids (duplicates can occur)
-        for audio_file in tqdm(matched_audio_files):
+        for audio_file in tqdm(self.audio_files):
 
-            label_file = audio_label_mapping[audio_file]
+            self.files.append(audio_file)
 
-            # Read in label from annot.json
-            with open(osp.join(self.LABELS_PATH, label_file), 'r', encoding='utf-8') as file:
-                label_config = json.load(file)
-                label: str = label_config["levels"][0]["items"][0]["labels"][6]["value"] # "a","na"
-                speaker_id = int(audio_file[:3])
-                assert label_config["levels"][0]["items"][0]["labels"][6]["name"] == "alc"
-                assert label_config["levels"][0]["items"][0]["labels"][2]["name"] == "spn"
-                assert speaker_id == int(label_config["levels"][0]["items"][0]["labels"][2]["value"])
+            # parse id 
+            data_id = Path(audio_file).stem[:-8]
+            label = self.labels[data_id]
 
-                if label == "cna": continue # skip control group class
-                
-                self.files.append(audio_file) # list of audio file names
-                self.class_labels.append(self.class_mapping[label]) # list of integer class labels
-                self.speaker_ids.append(speaker_id) # list of the speaker ids
-                if speaker_id not in self.speaker_id_to_index:
-                    self.speaker_id_to_index[speaker_id] = len(self.speaker_id_to_index)
+            speaker_id = int(label["speaker"][3:])
+            self.class_labels.append(self.class_mapping[label["label"]])
+            self.speaker_ids.append(speaker_id)
+            if speaker_id not in self.speaker_id_to_index:
+                self.speaker_id_to_index[speaker_id] = len(self.speaker_id_to_index)
 
         if self.verbose:
             print(f"Number of data samples used for training & testing: {len(self.class_labels)} (filtered out control group class)")
@@ -106,7 +92,7 @@ class DAC218Data(Dataset):
 
         # Look in .cache and see if the data is stored load and return
         os.makedirs(".cache", exist_ok=True)
-        cache_path = osp.join(".cache","opensmile-features.pt")
+        cache_path = osp.join(".cache","dac218-opensmile-features.pt")
         if osp.exists(cache_path):
 
             if self.verbose: print(f"Loading pre-processed audio features from cache: {cache_path}")
@@ -242,8 +228,12 @@ class DAC218Data(Dataset):
 
 
     def __getitem__(self, index):
+
+        if not self.is_cached:
+            self.cache()
+
         audio_file = self.files[index]
-        speaker_id = int(audio_file[:3])
+        speaker_id = int(audio_file[3:6])
         class_label = self.class_labels[index]
 
         if speaker_id in self.train_speaker_mapping: # This is a train sample
@@ -285,11 +275,10 @@ if __name__ == "__main__":
 
     print(f"Loading data...")
     t = time()
-    data = ALCData(
-        max_samples=None,
+    data = DAC218Data(
+        max_samples=200,
         verbose=True,
     )
-    data.cache()
     t_tot = time() - t
     print(f"Total time to setup dataset: {t_tot:.2f} s")
     print(f"Number of data samples: {len(data)}")
