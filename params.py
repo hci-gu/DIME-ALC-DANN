@@ -10,7 +10,7 @@ class Params():
 
     # Training params
     n_epochs: int = 100
-    batch_size: int = 128
+    batch_size: int = 512
     n_workers: int = 1
     device: str = field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
     optim_metric: str = "val/auroc"
@@ -42,25 +42,25 @@ class Params():
     # Extractor
     extractor_input_dimension: int = 6373
     extractor_hidden_dimension: int = 256
-    extractor_n_layers: int = 3
-    extractor_output_dimension: int = 256
-    extractor_activation_function: str = "relu"
+    extractor_n_layers: int = 5
+    extractor_output_dimension: int = 1024
+    extractor_activation_function: str = "gelu"
     extractor_p_dropout: float = 0.4
 
     # Classifier
     classifier_input_dimension: int = extractor_output_dimension
-    classifier_hidden_dimension: int = 256
-    classifier_n_layers: int = 5
+    classifier_hidden_dimension: int = 64
+    classifier_n_layers: int = 2
     classifier_output_dimension: int = 1
-    classifier_activation_function: str = "relu"
+    classifier_activation_function: str = "gelu"
     classifier_p_dropout: float = 0.4
 
     # Discriminator
     discriminator_input_dimension: int = extractor_output_dimension
     discriminator_hidden_dimension: int = 256
-    discriminator_n_layers: int = 5
+    discriminator_n_layers: int = 3
     discriminator_output_dimension: int = 10
-    discriminator_activation_function: str = "relu"
+    discriminator_activation_function: str = "gelu"
     discriminator_p_dropout: float = 0.4
 
     @classmethod
