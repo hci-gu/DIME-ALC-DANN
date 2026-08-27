@@ -1,4 +1,3 @@
-
 import os
 import re
 import json
@@ -45,8 +44,9 @@ for (root,dirs,files) in os.walk(ROOT_DIR,topdown=True):
 
         if file.endswith(".wav"): # audio file
 
+            print(file, source_path)
             # Parse audio file
-            split_path = root.split("\\")
+            split_path = root.split(os.sep)
             speaker = [x for x in split_path if x.startswith("spk")]
             session = [x for x in split_path if x.startswith("sess")]
             assert len(speaker) == 1, f"Expected only a single match both got {speaker}"
@@ -87,6 +87,7 @@ for (root,dirs,files) in os.walk(ROOT_DIR,topdown=True):
 print("max delta in data:",max_delta)
 
 # Finally write the labels file
+print(f"Saved labels in {label_target_path}")
 if not dry_run: 
     with open(label_target_path, "w") as json_file:
         json.dump(labels_list, json_file, indent=4)
