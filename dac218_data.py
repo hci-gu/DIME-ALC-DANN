@@ -226,14 +226,13 @@ class DAC218Data(Dataset):
     def __len__(self):
         return self.len
 
-
     def __getitem__(self, index):
 
         if not self.is_cached:
-            self.cache()
+            raise RuntimeError("Call data.cache(train_indices=...) before accessing samples.")
 
         audio_file = self.files[index]
-        speaker_id = int(audio_file[3:6])
+        speaker_id = self.speaker_ids[index]
         class_label = self.class_labels[index]
 
         if speaker_id in self.train_speaker_mapping: # This is a train sample
@@ -286,6 +285,7 @@ if __name__ == "__main__":
     # Train/Val/Test splitting
     train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.8, val_frac=0.1, test_frac=0.1)
     train_data = Subset(data, train_indices)
+    data.cache(train_indices=train_indices)
 
     # Get 5 random sample
     x, y, s, files = train_data.dataset.get_example_sample(5)
