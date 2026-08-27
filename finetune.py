@@ -24,7 +24,7 @@ else:
 if args.checkpoint:
     checkpoint_name = args.checkpoint
 else:
-    checkpoint_name = "dann_model-nosy-colt-808.pth"
+    checkpoint_name = "dann_model-unequaled-rat-371.pth"
 
 verbose = args.verbose
 run_name = args.run_name
