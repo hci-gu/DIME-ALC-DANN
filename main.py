@@ -7,6 +7,7 @@ import torch.nn as nn
 from model import DANN
 from params import Params
 from alc_data import ALCData
+from dac218_data import DAC218Data
 from functools import partial
 from dataclasses import asdict
 from utils.hpo_status import filter_study
@@ -41,11 +42,20 @@ def main():
 
     # Load data
     if p.verbose: print(f"Loading data...")
-    data = ALCData(
-        max_samples=max_samples,
-        seed=SEED,
-        verbose=verbose
-    )
+    if args.data.lower() == "alc":
+        data = ALCData(
+            max_samples=max_samples,
+            seed=SEED,
+            verbose=verbose
+        )
+    elif args.data.lower() == "dac":
+        data = DAC218Data(
+            max_samples=max_samples,
+            seed=SEED,
+            verbose=verbose
+        )
+    else:
+        raise RuntimeError(f"Unexpected data type {args.data}")
 
     # Train/Val/Test splitting
     train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.7, val_frac=0.15, test_frac=0.15)
@@ -72,6 +82,7 @@ def main():
             TIMEOUT_IN_SECONDS = int(60 * 60 * 24 * DAY_BUDGET)  # In seconds
 
             mlflow.log_params({
+                "dataset": args.data,
                 "optim_metric": p.optim_metric,
                 "dev_run": p.dev_run,
                 "n_trials": N_TRIALS,
@@ -142,6 +153,7 @@ def main():
 
             # Log parameters
             mlflow.log_params(asdict(p))
+            mlflow.log_param("dataset", args.data)
 
             # Log data metadata
             mlflow.log_dict(data.get_split_speakers(),"speaker_data_split.json")
@@ -164,7 +176,7 @@ def main():
             if save_model:
                 model.to("cpu")
                 run_name = mlflow.active_run().data.tags["mlflow.runName"].replace(" ", "_").replace("/", "_").replace("\\", "_")
-                save_path = os.path.join("weights",f"dann_model-{run_name}.pth")
+                save_path = os.path.join("weights", f"dann_model-{args.data}-{run_name}.pth")
                 os.makedirs("weights", exist_ok=True)
                 torch.save(model, save_path)
                 print(f"Saved model to: {save_path}")
