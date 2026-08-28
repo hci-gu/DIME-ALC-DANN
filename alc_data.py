@@ -74,6 +74,7 @@ class ALCData(Dataset):
         self.class_labels = [] # 0 (NA), 1 (A)
         self.speaker_id_to_index = {} # speaker_id : speaker_index (used to map random speakerID to 0,1,2,...,n_speakers-1)
         self.speaker_ids = [] # list of speaker ids (duplicates can occur)
+        self.bac_values = [] # blood alcohol concentration in per mille
         for audio_file in tqdm(matched_audio_files):
 
             label_file = audio_label_mapping[audio_file]
@@ -81,17 +82,31 @@ class ALCData(Dataset):
             # Read in label from annot.json
             with open(osp.join(self.LABELS_PATH, label_file), 'r', encoding='utf-8') as file:
                 label_config = json.load(file)
-                label: str = label_config["levels"][0]["items"][0]["labels"][6]["value"] # "a","na"
+                labels = label_config["levels"][0]["items"][0]["labels"]
+                label: str = labels[6]["value"] # "a","na"
                 speaker_id = int(audio_file[:3])
-                assert label_config["levels"][0]["items"][0]["labels"][6]["name"] == "alc"
-                assert label_config["levels"][0]["items"][0]["labels"][2]["name"] == "spn"
-                assert speaker_id == int(label_config["levels"][0]["items"][0]["labels"][2]["value"])
+                assert labels[6]["name"] == "alc"
+                assert labels[2]["name"] == "spn"
+                assert speaker_id == int(labels[2]["value"])
 
                 if label == "cna": continue # skip control group class
+
+                labels_by_name = {item["name"]: item["value"] for item in labels}
+                try:
+                    bac_per_mille = float(labels_by_name["bak"]) * 1000.0
+                except (KeyError, TypeError, ValueError) as error:
+                    raise ValueError(
+                        f"Invalid or missing BAK value for {audio_file}"
+                    ) from error
+                if not np.isfinite(bac_per_mille) or bac_per_mille < 0:
+                    raise ValueError(
+                        f"Invalid BAK value for {audio_file}: {bac_per_mille}"
+                    )
                 
                 self.files.append(audio_file) # list of audio file names
                 self.class_labels.append(self.class_mapping[label]) # list of integer class labels
                 self.speaker_ids.append(speaker_id) # list of the speaker ids
+                self.bac_values.append(bac_per_mille)
                 if speaker_id not in self.speaker_id_to_index:
                     self.speaker_id_to_index[speaker_id] = len(self.speaker_id_to_index)
 

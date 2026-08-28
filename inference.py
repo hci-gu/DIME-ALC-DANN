@@ -5,9 +5,13 @@ from datetime import datetime
 from pathlib import Path
 
 import mlflow
+import matplotlib
 import numpy as np
 import torch
 import torch.nn as nn
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 from mlflow.entities import Run
 from mlflow.tracking import MlflowClient
@@ -23,6 +27,7 @@ from utils.argument_parsing import parse_args
 
 EXPERIMENT_NAME = "DANN"
 SPLIT_ARTIFACT = "speaker_data_split.json"
+BAC_BIN_WIDTH = 0.2
 
 
 class ClassifierInference(nn.Module):
@@ -295,26 +300,20 @@ def calculate_metrics(
 def write_predictions(
     dataset,
     dataset_indices: np.ndarray,
+    bac_values: np.ndarray,
     labels: np.ndarray,
     probabilities: np.ndarray,
     predictions: np.ndarray,
     threshold: float,
-    dataset_name: str,
     run_name: str,
     run_id: str,
+    output_path: Path,
 ) -> Path:
-    output_directory = Path("evals")
-    output_directory.mkdir(exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    safe_run_name = sanitize_run_name(run_name)
-    output_path = output_directory / (
-        f"predictions-{dataset_name}-{safe_run_name}-{timestamp}.csv"
-    )
-
     fieldnames = [
         "dataset_index",
         "filename",
         "speaker_id",
+        "bac_per_mille",
         "true_label",
         "probability_intoxicated",
         "predicted_label",
@@ -325,8 +324,9 @@ def write_predictions(
     with output_path.open("w", newline="", encoding="utf-8") as output_file:
         writer = csv.DictWriter(output_file, fieldnames=fieldnames)
         writer.writeheader()
-        for index, label, probability, prediction in zip(
+        for index, bac, label, probability, prediction in zip(
             dataset_indices,
+            bac_values,
             labels,
             probabilities,
             predictions,
@@ -337,6 +337,7 @@ def write_predictions(
                     "dataset_index": dataset_index,
                     "filename": dataset.files[dataset_index],
                     "speaker_id": dataset.speaker_ids[dataset_index],
+                    "bac_per_mille": float(bac),
                     "true_label": int(label),
                     "probability_intoxicated": float(probability),
                     "predicted_label": int(prediction),
@@ -345,6 +346,262 @@ def write_predictions(
                     "run_id": run_id,
                 }
             )
+    return output_path.resolve()
+
+
+def create_output_paths(dataset_name: str, run_name: str) -> dict[str, Path]:
+    output_directory = Path("evals")
+    output_directory.mkdir(exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    suffix = f"{dataset_name}-{sanitize_run_name(run_name)}-{timestamp}"
+    return {
+        "predictions": output_directory / f"predictions-{suffix}.csv",
+        "bac_bins": output_directory / f"bac-bins-{suffix}.csv",
+        "bac_probability": output_directory / f"bac-probability-{suffix}.png",
+        "bac_precision_recall": output_directory / f"bac-precision-recall-{suffix}.png",
+        "bac_pod": output_directory / f"bac-pod-{suffix}.png",
+    }
+
+
+def wilson_interval(successes: int, total: int, z_score: float = 1.96) -> tuple[float, float] | None:
+    if total == 0:
+        return None
+    proportion = successes / total
+    z_squared = z_score ** 2
+    denominator = 1 + z_squared / total
+    center = (proportion + z_squared / (2 * total)) / denominator
+    half_width = (
+        z_score
+        * np.sqrt(
+            proportion * (1 - proportion) / total
+            + z_squared / (4 * total ** 2)
+        )
+        / denominator
+    )
+    return max(0.0, center - half_width), min(1.0, center + half_width)
+
+
+def calculate_bac_bins(
+    bac_values: np.ndarray,
+    labels: np.ndarray,
+    predictions: np.ndarray,
+    bin_width: float = BAC_BIN_WIDTH,
+) -> list[dict[str, int | float | None]]:
+    if len(bac_values) != len(labels) or len(labels) != len(predictions):
+        raise ValueError("BAC values, labels, and predictions must have equal lengths")
+    if not len(bac_values):
+        raise ValueError("Cannot calculate BAC bins without samples")
+    if bin_width <= 0:
+        raise ValueError("BAC bin width must be positive")
+    if not np.isfinite(bac_values).all() or (bac_values < 0).any():
+        raise ValueError("BAC values must be finite and non-negative")
+
+    n_bins = max(1, int(np.ceil(float(bac_values.max()) / bin_width)))
+    edges = np.arange(n_bins + 1, dtype=float) * bin_width
+    bin_rows: list[dict[str, int | float | None]] = []
+
+    for bin_index, (lower, upper) in enumerate(zip(edges[:-1], edges[1:])):
+        if bin_index == n_bins - 1:
+            in_bin = (bac_values >= lower) & (bac_values <= upper)
+        else:
+            in_bin = (bac_values >= lower) & (bac_values < upper)
+
+        bin_labels = labels[in_bin]
+        bin_predictions = predictions[in_bin]
+        tp = int((bin_predictions & bin_labels).sum())
+        fp = int((bin_predictions & ~bin_labels).sum())
+        fn = int((~bin_predictions & bin_labels).sum())
+        n_intoxicated = int(bin_labels.sum())
+        detected = tp
+        missed = fn
+        precision = tp / (tp + fp) if tp + fp else None
+        recall = tp / (tp + fn) if tp + fn else None
+        interval = wilson_interval(detected, detected + missed)
+
+        bin_rows.append(
+            {
+                "bac_lower": float(lower),
+                "bac_upper": float(upper),
+                "bac_midpoint": float((lower + upper) / 2),
+                "n_samples": int(in_bin.sum()),
+                "n_sober": int(len(bin_labels) - n_intoxicated),
+                "n_intoxicated": n_intoxicated,
+                "predicted_positive": int(bin_predictions.sum()),
+                "tp": tp,
+                "fp": fp,
+                "fn": fn,
+                "detected": detected,
+                "missed": missed,
+                "precision": precision,
+                "recall": recall,
+                "pod": recall,
+                "pod_ci_lower": interval[0] if interval is not None else None,
+                "pod_ci_upper": interval[1] if interval is not None else None,
+            }
+        )
+    return bin_rows
+
+
+def write_bac_bins(
+    bin_rows: list[dict[str, int | float | None]],
+    output_path: Path,
+) -> Path:
+    with output_path.open("w", newline="", encoding="utf-8") as output_file:
+        writer = csv.DictWriter(output_file, fieldnames=list(bin_rows[0]))
+        writer.writeheader()
+        writer.writerows(bin_rows)
+    return output_path.resolve()
+
+
+def plot_bac_probability(
+    bac_values: np.ndarray,
+    labels: np.ndarray,
+    probabilities: np.ndarray,
+    threshold: float,
+    output_path: Path,
+) -> Path:
+    figure, axis = plt.subplots(figsize=(7, 5), dpi=140)
+    for label, name, color in (
+        (False, "Sober", "tab:blue"),
+        (True, "Intoxicated", "tab:orange"),
+    ):
+        mask = labels == label
+        axis.scatter(
+            bac_values[mask],
+            probabilities[mask],
+            alpha=0.55,
+            s=22,
+            color=color,
+            label=f"{name} (n={int(mask.sum())})",
+        )
+    axis.axhline(
+        threshold,
+        color="black",
+        linestyle="--",
+        linewidth=1.2,
+        label=f"Decision threshold={threshold:.3f}",
+    )
+    axis.set(
+        title="BAC versus predicted intoxication probability",
+        xlabel="BAC (‰)",
+        ylabel="P(intoxicated)",
+        ylim=(-0.02, 1.02),
+    )
+    axis.grid(alpha=0.25)
+    axis.legend()
+    figure.tight_layout()
+    figure.savefig(output_path)
+    plt.close(figure)
+    return output_path.resolve()
+
+
+def plot_bac_precision_recall(
+    bin_rows: list[dict[str, int | float | None]],
+    output_path: Path,
+) -> Path:
+    midpoints = np.array([row["bac_midpoint"] for row in bin_rows], dtype=float)
+    precision = np.array(
+        [np.nan if row["precision"] is None else row["precision"] for row in bin_rows],
+        dtype=float,
+    )
+    recall = np.array(
+        [np.nan if row["recall"] is None else row["recall"] for row in bin_rows],
+        dtype=float,
+    )
+
+    figure, axis = plt.subplots(figsize=(7, 5), dpi=140)
+    axis.plot(midpoints, precision, marker="o", label="Precision")
+    axis.plot(midpoints, recall, marker="o", label="Recall")
+    for midpoint, row in zip(midpoints, bin_rows):
+        axis.annotate(
+            f"n={row['n_samples']}",
+            (midpoint, 1.01),
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            rotation=45,
+        )
+    axis.set(
+        title=f"Precision and recall by {BAC_BIN_WIDTH:.1f}‰ BAC bin",
+        xlabel="BAC bin midpoint (‰)",
+        ylabel="Metric value",
+        ylim=(-0.02, 1.13),
+    )
+    axis.grid(alpha=0.25)
+    axis.legend()
+    figure.tight_layout()
+    figure.savefig(output_path)
+    plt.close(figure)
+    return output_path.resolve()
+
+
+def plot_bac_pod(
+    bin_rows: list[dict[str, int | float | None]],
+    output_path: Path,
+) -> Path:
+    populated_rows = [row for row in bin_rows if row["n_intoxicated"] > 0]
+    if not populated_rows:
+        figure, axis = plt.subplots(figsize=(7, 5), dpi=140)
+        axis.text(
+            0.5,
+            0.5,
+            "No intoxicated clips in the selected test samples",
+            ha="center",
+            va="center",
+            transform=axis.transAxes,
+        )
+        axis.set_title("Probability of detection by BAC")
+        axis.set_axis_off()
+        figure.tight_layout()
+        figure.savefig(output_path)
+        plt.close(figure)
+        return output_path.resolve()
+
+    midpoints = np.array([row["bac_midpoint"] for row in populated_rows], dtype=float)
+    detected = np.array([row["detected"] for row in populated_rows], dtype=int)
+    missed = np.array([row["missed"] for row in populated_rows], dtype=int)
+    pod = np.array([row["pod"] for row in populated_rows], dtype=float)
+    ci_lower = np.array([row["pod_ci_lower"] for row in populated_rows], dtype=float)
+    ci_upper = np.array([row["pod_ci_upper"] for row in populated_rows], dtype=float)
+
+    figure, count_axis = plt.subplots(figsize=(7, 5), dpi=140)
+    bar_width = BAC_BIN_WIDTH * 0.72
+    count_axis.bar(midpoints, detected, width=bar_width, label="Detected", color="tab:green")
+    count_axis.bar(
+        midpoints,
+        missed,
+        width=bar_width,
+        bottom=detected,
+        label="Missed",
+        color="tab:red",
+    )
+    count_axis.set(
+        title="Probability of detection by BAC",
+        xlabel="BAC bin midpoint (‰)",
+        ylabel="Intoxicated clip count",
+    )
+
+    pod_axis = count_axis.twinx()
+    pod_axis.errorbar(
+        midpoints,
+        pod,
+        yerr=np.vstack((pod - ci_lower, ci_upper - pod)),
+        color="black",
+        marker="o",
+        capsize=4,
+        linewidth=1.5,
+        label="POD (95% Wilson CI)",
+    )
+    pod_axis.set_ylabel("Probability of detection")
+    pod_axis.set_ylim(-0.02, 1.05)
+    count_axis.grid(axis="y", alpha=0.25)
+
+    count_handles, count_labels = count_axis.get_legend_handles_labels()
+    pod_handles, pod_labels = pod_axis.get_legend_handles_labels()
+    count_axis.legend(count_handles + pod_handles, count_labels + pod_labels, loc="upper left")
+    figure.tight_layout()
+    figure.savefig(output_path)
+    plt.close(figure)
     return output_path.resolve()
 
 
@@ -460,23 +717,55 @@ def main() -> None:
         test_probabilities,
         threshold,
     )
-    output_path = write_predictions(
+    if len(dataset.bac_values) != len(dataset.files):
+        raise RuntimeError("Dataset BAC values are not aligned with its files")
+    test_bac_values = np.array(
+        [dataset.bac_values[int(index)] for index in test_dataset_indices],
+        dtype=float,
+    )
+    bin_rows = calculate_bac_bins(
+        test_bac_values,
+        test_labels,
+        test_predictions,
+    )
+    output_paths = create_output_paths(dataset_name, args.run_name)
+    generated_paths = [write_predictions(
         dataset=dataset,
         dataset_indices=test_dataset_indices,
+        bac_values=test_bac_values,
         labels=test_labels,
         probabilities=test_probabilities,
         predictions=test_predictions,
         threshold=threshold,
-        dataset_name=dataset_name,
         run_name=args.run_name,
         run_id=run.info.run_id,
+        output_path=output_paths["predictions"],
+    )]
+    generated_paths.append(write_bac_bins(bin_rows, output_paths["bac_bins"]))
+    generated_paths.append(
+        plot_bac_probability(
+            test_bac_values,
+            test_labels,
+            test_probabilities,
+            threshold,
+            output_paths["bac_probability"],
+        )
     )
+    generated_paths.append(
+        plot_bac_precision_recall(
+            bin_rows,
+            output_paths["bac_precision_recall"],
+        )
+    )
+    generated_paths.append(plot_bac_pod(bin_rows, output_paths["bac_pod"]))
 
     print(f"Run: {args.run_name} ({run.info.run_id})")
     print(f"Dataset: {dataset_name}")
     print(f"Device: {device}; compiled: {args.compile}")
     print(json.dumps(metrics, indent=2))
-    print(f"Predictions written to: {output_path}")
+    print("Generated evaluation files:")
+    for generated_path in generated_paths:
+        print(f"- {generated_path}")
 
 
 if __name__ == "__main__":

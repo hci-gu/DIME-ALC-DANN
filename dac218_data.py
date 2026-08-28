@@ -67,17 +67,31 @@ class DAC218Data(Dataset):
         self.class_labels = [] # 0 (NA), 1 (A)
         self.speaker_id_to_index = {} # speaker_id : speaker_index (used to map random speakerID to 0,1,2,...,n_speakers-1)
         self.speaker_ids = [] # list of speaker ids (duplicates can occur)
+        self.bac_values = [] # blood alcohol concentration in per mille
         for audio_file in tqdm(self.audio_files):
-
-            self.files.append(audio_file)
 
             # parse id 
             data_id = Path(audio_file).stem[:-8]
             label = self.labels[data_id]
 
             speaker_id = int(label["speaker"][3:])
+            try:
+                bac_before = float(label["bac_before"])
+                bac_after = float(label["bac_after"])
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError(
+                    f"Invalid or missing BAC value for {audio_file}"
+                ) from error
+            bac_per_mille = (bac_before + bac_after) / 2.0
+            if not np.isfinite(bac_per_mille) or bac_per_mille < 0:
+                raise ValueError(
+                    f"Invalid BAC value for {audio_file}: {bac_per_mille}"
+                )
+
+            self.files.append(audio_file)
             self.class_labels.append(self.class_mapping[label["label"]])
             self.speaker_ids.append(speaker_id)
+            self.bac_values.append(bac_per_mille)
             if speaker_id not in self.speaker_id_to_index:
                 self.speaker_id_to_index[speaker_id] = len(self.speaker_id_to_index)
 
