@@ -4,6 +4,7 @@
 .env
 data/
 weights/
+evals/
 __pycache__/
 mlflow.db
 tensorboard

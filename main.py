@@ -154,6 +154,7 @@ def main():
             # Log parameters
             mlflow.log_params(asdict(p))
             mlflow.log_param("dataset", args.data)
+            mlflow.log_param("max_samples", max_samples if max_samples is not None else "all")
 
             # Log data metadata
             mlflow.log_dict(data.get_split_speakers(),"speaker_data_split.json")
