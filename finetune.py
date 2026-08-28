@@ -63,23 +63,27 @@ test_loader = DataLoader(test_data, p.batch_size, shuffle=False, num_workers=p.n
 # Load in pre-trained model
 model = DANN(p)
 pretrained_model: DANN = torch.load(os.path.join("weights", checkpoint_name), map_location="cpu", weights_only=False)
-# model.extractor.load_state_dict(pretrained_model.extractor.state_dict())
-# model.classifier.load_state_dict(pretrained_model.classifier.state_dict())
-# model.to(device)
+model.extractor.load_state_dict(pretrained_model.extractor.state_dict())
+model.classifier.load_state_dict(pretrained_model.classifier.state_dict())
+model.to(device)
 
 # Optimizer
 optimizer_cls = getattr(torch.optim, p.optimizer)
-optimizer = optimizer_cls(model.parameters(), **p.get_vars_from_prefix("optimizer"))
+#optimizer = optimizer_cls(model.parameters(), **p.get_vars_from_prefix("optimizer"))
+optimizer = torch.optim.RMSprop([
+    {"params": model.extractor.parameters(), "lr": 1e-5},
+    {"params": model.classifier.parameters(), "lr": 5e-5},
+    {"params": model.discriminator.parameters(), "lr": 5e-5},
+])
 
 # Loss function
 classifier_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 discriminator_loss_fn = nn.CrossEntropyLoss()
 loss_functions = (classifier_loss_fn, discriminator_loss_fn)
 
-exit(0)
 
 # start finetuning
-with mlflow.start_run(run_name=run_name, tags={"run_type": "normal"}):
+with mlflow.start_run(run_name=run_name, tags={"run_type": "finetune"}):
 
     # Log parameters
     mlflow.log_params(asdict(p))
