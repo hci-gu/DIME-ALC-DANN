@@ -153,7 +153,8 @@ def main():
         mlflow.log_metric("training_time", t_tot)
 
         # Run test evaluation
-        test_metrics = evaluate(model, p, classifier_loss_fn, test_loader, device, eval_type="test")
+        best_threshold = evaluate(model, p, classifier_loss_fn, val_loader, device)["val/best_threshold"]
+        test_metrics = evaluate(model, p, classifier_loss_fn, test_loader, device, eval_type="test", threshold=best_threshold)
         mlflow.log_metrics(test_metrics)
 
         # Save checkpoint
