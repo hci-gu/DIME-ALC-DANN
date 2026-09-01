@@ -78,7 +78,7 @@ optimizer = torch.optim.RMSprop([
 
 # Loss function
 classifier_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-discriminator_loss_fn = nn.CrossEntropyLoss()
+discriminator_loss_fn = nn.CrossEntropyLoss(label_smoothing=p.label_smoothing)
 loss_functions = (classifier_loss_fn, discriminator_loss_fn)
 
 

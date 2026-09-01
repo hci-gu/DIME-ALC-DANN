@@ -146,7 +146,7 @@ def main():
 
         # Loss function
         classifier_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-        discriminator_loss_fn = nn.CrossEntropyLoss()
+        discriminator_loss_fn = nn.CrossEntropyLoss(label_smoothing=p.label_smoothing)
         loss_functions = (classifier_loss_fn, discriminator_loss_fn)
 
         with mlflow.start_run(run_name=run_name, tags={"run_type": "normal"}):
