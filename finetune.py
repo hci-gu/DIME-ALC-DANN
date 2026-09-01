@@ -66,9 +66,23 @@ def main():
 
     # Load in pre-trained model
     model = DANN(p)
-    pretrained_model: DANN = torch.load(os.path.join("weights", checkpoint_name), map_location="cpu", weights_only=False)
-    model.extractor.load_state_dict(pretrained_model.extractor.state_dict())
-    model.classifier.load_state_dict(pretrained_model.classifier.state_dict())
+    try:
+        pretrained_model = torch.load(
+            os.path.join("weights", checkpoint_name),
+            map_location="cpu",
+            weights_only=False,
+        )
+        if not isinstance(pretrained_model, DANN):
+            raise TypeError(
+                f"Expected a DANN checkpoint, got {type(pretrained_model).__name__}"
+            )
+
+        model.extractor.load_state_dict(pretrained_model.extractor.state_dict())
+        model.classifier.load_state_dict(pretrained_model.classifier.state_dict())
+    except (FileNotFoundError, TypeError, RuntimeError) as error:
+        raise RuntimeError(
+            f"Could not load a compatible pretrained model from {checkpoint_name!r}"
+        ) from error
     model.to(device)
 
     # Optimizer
