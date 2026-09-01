@@ -13,6 +13,7 @@ from dataclasses import asdict
 from utils.hpo_status import filter_study
 from train import train, evaluate, objective
 from utils.argument_parsing import parse_args
+from utils.seed_control import seed_everything
 from torch.utils.data import DataLoader, Subset
 
 
@@ -31,6 +32,7 @@ def main():
     verbose = args.verbose
     run_name = args.run_name
     SEED = args.seed
+    seed_everything(SEED)
 
     # Mlflow tracking
     experiment_name = "DANN"

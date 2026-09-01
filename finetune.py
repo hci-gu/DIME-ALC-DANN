@@ -9,6 +9,7 @@ from dataclasses import asdict
 from train import train, evaluate
 from dac218_data import DAC218Data
 from utils.argument_parsing import parse_args
+from utils.seed_control import seed_everything
 from torch.utils.data import DataLoader, Subset
 
 # CLI args
@@ -29,6 +30,7 @@ else:
 verbose = args.verbose
 run_name = args.run_name
 SEED = args.seed
+seed_everything(SEED)
 
 # Mlflow tracking
 experiment_name = "DANN - finetune"
