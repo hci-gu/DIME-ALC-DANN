@@ -163,8 +163,7 @@ def evaluate(
     # Precision-Recall Curve & optimal threshold
     pr_precision, pr_recall, pr_thresholds = precision_recall_curve(y_true, y_probas)
     pr_f1 = 2 * pr_precision[:-1] * pr_recall[:-1] / (pr_precision[:-1] + pr_recall[:-1] + 1e-12)
-    best_f1 = pr_f1.max()
-    if threshold:
+    if threshold is not None:
         best_threshold = threshold
     else:
         best_threshold = float(pr_thresholds[pr_f1.argmax()]) if len(pr_thresholds) else 0.5
@@ -215,7 +214,6 @@ def evaluate(
         "auroc": auroc,
         "balanced_accuracy": balanced_accuracy,
         "specificity": specificity,
-        "best_f1": best_f1,
         "best_threshold": round(best_threshold, 4),
         "tp": tp,
         "tn": tn,
