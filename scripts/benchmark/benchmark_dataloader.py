@@ -50,11 +50,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def move_batch_to_device(batch, device: torch.device):
-    x, y, s = batch
+    x, y, metadata = batch
     return (
         x.to(device, non_blocking=True),
         y.to(device, dtype=torch.float32, non_blocking=True),
-        s.to(device, dtype=torch.long, non_blocking=True),
+        metadata["local_index"].to(device, dtype=torch.long, non_blocking=True),
     )
 
 

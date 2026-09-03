@@ -85,6 +85,7 @@ def main():
 
             mlflow.log_params({
                 "dataset": args.data,
+                "pos_weight": pos_weight.item() if pos_weight is not None else "disabled",
                 "optim_metric": p.optim_metric,
                 "dev_run": p.dev_run,
                 "n_trials": N_TRIALS,
@@ -154,9 +155,12 @@ def main():
         with mlflow.start_run(run_name=run_name, tags={"run_type": "normal"}):
 
             # Log parameters
-            mlflow.log_params(asdict(p))
-            mlflow.log_param("dataset", args.data)
-            mlflow.log_param("max_samples", max_samples if max_samples is not None else "all")
+            mlflow.log_params({
+                "dataset": args.data,
+                "pos_weight": pos_weight.item() if pos_weight is not None else "disabled",
+                "max_samples": max_samples if max_samples is not None else "all",
+                **asdict(p)
+                })
 
             # Log data metadata
             mlflow.log_dict(data.get_split_speakers(),"speaker_data_split.json")

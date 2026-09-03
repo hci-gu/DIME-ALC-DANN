@@ -17,6 +17,7 @@ class ALCData(Dataset):
         data_path = None,
         transforms = None,
         max_samples: int = None,
+        lower_bac_limit: float = None, # promille
         seed: int = 1999,
         verbose: bool = False
         ):
@@ -33,6 +34,7 @@ class ALCData(Dataset):
         self.transforms = transforms
         self.verbose = verbose
         self.max_samples = max_samples
+        self.lower_bac_limit = lower_bac_limit
         self.seed = seed
         self.is_cached = False
         self.is_split = False
@@ -102,6 +104,10 @@ class ALCData(Dataset):
                     raise ValueError(
                         f"Invalid BAK value for {audio_file}: {bac_per_mille}"
                     )
+                if (self.lower_bac_limit is not None) and (self.lower_bac_limit > bac_per_mille > 0):
+                    if self.verbose: print(f"Skipped audio file")
+                    continue
+
                 
                 self.files.append(audio_file) # list of audio file names
                 self.class_labels.append(self.class_mapping[label]) # list of integer class labels
@@ -173,7 +179,6 @@ class ALCData(Dataset):
         self.mu = train_features.mean(dim=0)
         self.sigma = train_features.std(dim=0)
     
-        if self.verbose: print("Z-score shapes:", self.mu.shape, self.sigma.shape)
         self.is_cached = True
 
     def calculate_pos_weight(self, train_indices):
@@ -266,6 +271,12 @@ class ALCData(Dataset):
         else: # Val or test sample
             local_index = -1
 
+        metadata = {
+            "speaker_id": speaker_id,
+            "local_index": local_index,
+            "bac": self.bac_values[index]
+        }
+
         if self.is_cached:
             x = self.cache_dict[audio_file]
         else:
@@ -277,7 +288,7 @@ class ALCData(Dataset):
 
         if self.transforms:
             x = self.transforms(x)
-        return x, class_label, local_index
+        return x, class_label, metadata
 
 
     def get_example_sample(self, n: int = 5):
@@ -287,10 +298,10 @@ class ALCData(Dataset):
         id_list = []
         file_list = []
         for idx in sample_idx:
-            x, y, s = self.__getitem__(idx)
+            x, y, metadata = self.__getitem__(idx)
             x_list.append(x)
             y_list.append(y)
-            id_list.append(s)
+            id_list.append(metadata["local_index"])
             file_list.append(self.files[idx])
         return torch.stack(x_list, dim=0), torch.stack(y_list, dim=0), torch.tensor(id_list), file_list
 

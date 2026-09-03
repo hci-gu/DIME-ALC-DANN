@@ -92,18 +92,18 @@ def train_one_profiled_window(
     for step in range(n_steps):
         try:
             with record_function("dataloader_next"):
-                x, y, s = next(train_iter)
+                x, y, metadata = next(train_iter)
         except StopIteration:
             train_iter = iter(train_loader)
             with record_function("dataloader_next"):
-                x, y, s = next(train_iter)
+                x, y, metadata = next(train_iter)
 
         alpha = alpha_schedule(step, n_steps)
 
         with record_function("device_transfer"):
             x = x.to(device, non_blocking=True)
             y = y.to(device, dtype=torch.float32, non_blocking=True)
-            s = s.to(device, dtype=torch.long, non_blocking=True)
+            s = metadata["local_index"].to(device, dtype=torch.long, non_blocking=True)
 
         with record_function("forward"):
             class_logits, speaker_logits = model(x, alpha=alpha)

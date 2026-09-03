@@ -101,13 +101,18 @@ def main():
     with mlflow.start_run(run_name=run_name, tags={"run_type": "finetune"}):
 
         # Log parameters
-        mlflow.log_params(asdict(p))
-        mlflow.log_params({
-            "source_checkpoint": checkpoint_name,
-            "finetune_extractor_lr": optimizer.param_groups[0]["lr"],
-            "finetune_classifier_lr": optimizer.param_groups[1]["lr"],
-            "finetune_discriminator_lr": optimizer.param_groups[2]["lr"],
-        })
+        mlflow.log_params(
+            {
+                "dataset": "dac",
+                "max_samples": max_samples if max_samples is not None else "all",
+                "pos_weight": pos_weight.item() if pos_weight is not None else "disabled",
+                "source_checkpoint": checkpoint_name,
+                "finetune_extractor_lr": optimizer.param_groups[0]["lr"],
+                "finetune_classifier_lr": optimizer.param_groups[1]["lr"],
+                "finetune_discriminator_lr": optimizer.param_groups[2]["lr"],
+                **asdict(p),
+            }
+        )
 
         # Log data metadata
         mlflow.log_dict(data.get_split_speakers(),"speaker_data_split.json")

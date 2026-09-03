@@ -19,6 +19,7 @@ class DAC218Data(Dataset):
         data_path = None,
         transforms = None,
         max_samples: int = None,
+        lower_limit_bac: float = None, # promille
         seed: int = 1999,
         verbose: bool = False
         ):
@@ -35,6 +36,7 @@ class DAC218Data(Dataset):
         self.transforms = transforms
         self.verbose = verbose
         self.max_samples = max_samples
+        self.lower_limit_bac = lower_limit_bac
         self.seed = seed
         self.is_cached = False
         self.is_split = False
@@ -87,6 +89,9 @@ class DAC218Data(Dataset):
                 raise ValueError(
                     f"Invalid BAC value for {audio_file}: {bac_per_mille}"
                 )
+            if (self.lower_limit_bac is not None) and (self.lower_limit_bac > bac_per_mille > 0):
+                if self.verbose: print(f"Skipped audio file")
+                continue
 
             self.files.append(audio_file)
             self.class_labels.append(self.class_mapping[label["label"]])
@@ -254,6 +259,12 @@ class DAC218Data(Dataset):
         else: # Val or test sample
             local_index = -1
 
+        metadata = {
+            "speaker_id": speaker_id,
+            "local_index": local_index,
+            "bac": self.bac_values[index]
+        }
+
         if self.is_cached:
             x = self.cache_dict[audio_file]
         else:
@@ -265,7 +276,7 @@ class DAC218Data(Dataset):
 
         if self.transforms:
             x = self.transforms(x)
-        return x, class_label, local_index
+        return x, class_label, metadata
 
 
     def get_example_sample(self, n: int = 5):
@@ -275,10 +286,10 @@ class DAC218Data(Dataset):
         id_list = []
         file_list = []
         for idx in sample_idx:
-            x, y, s = self.__getitem__(idx)
+            x, y, metadata = self.__getitem__(idx)
             x_list.append(x)
             y_list.append(y)
-            id_list.append(s)
+            id_list.append(metadata["local_index"])
             file_list.append(self.files[idx])
         return torch.stack(x_list, dim=0), torch.stack(y_list, dim=0), torch.tensor(id_list), file_list
 

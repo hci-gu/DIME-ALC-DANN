@@ -8,6 +8,7 @@ from sklearn.metrics import auc, roc_curve
 def log_evaluation_figures(
     y_true,
     y_probas,
+    bac_values,
     pr_precision,
     pr_recall,
     confusion_matrix: tuple[int, int, int, int],
@@ -70,6 +71,33 @@ def log_evaluation_figures(
     roc_ax.legend(loc="lower right")
     roc_ax.grid(alpha=0.3)
     _log_figure_with_step(roc_fig, f"{eval_type}_roc_curve", epoch)
+
+    # BAC versus predicted intoxication probability
+    intoxicated_mask = bac_values != 0
+    bac_fig, bac_ax = plt.subplots(figsize=(5, 4), dpi=120)
+    if intoxicated_mask.any():
+        bac_ax.scatter(
+            bac_values[intoxicated_mask],
+            y_probas[intoxicated_mask],
+            alpha=0.65,
+        )
+    else:
+        bac_ax.text(
+            0.5,
+            0.5,
+            "No intoxicated samples",
+            ha="center",
+            va="center",
+            transform=bac_ax.transAxes,
+        )
+    bac_ax.set(
+        title=f"{eval_type} BAC versus P(drunk)",
+        xlabel="BAC (‰)",
+        ylabel="P(drunk)",
+        ylim=(-0.02, 1.02),
+    )
+    bac_ax.grid(alpha=0.3)
+    _log_figure_with_step(bac_fig, f"{eval_type}_bac_probability", epoch)
 
 
 def _log_figure_with_step(fig, image_key: str, epoch: int) -> None:

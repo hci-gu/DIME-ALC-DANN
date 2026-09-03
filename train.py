@@ -50,13 +50,13 @@ def train(
         train_loss = 0.0
         n_correct_classifier = 0.0
         n_correct_discriminator = 0.0
-        for batch_idx, (x,y,s) in enumerate(tqdm(train_loader, desc="[Batch]", position=1, leave=False)):
+        for batch_idx, (x, y, metadata) in enumerate(tqdm(train_loader, desc="[Batch]", position=1, leave=False)):
             if p.dev_run and batch_idx > 3: break
 
             t_batch_start = time()
             x = x.to(device)
             y = y.to(device, dtype=torch.float32) # class label (intoxicated vs sober)
-            s = s.to(device, dtype=torch.long) # speaker local index
+            s = metadata["local_index"].to(device, dtype=torch.long) # speaker local index
             assert (s >= 0).all(), f"Detected negative speaker_id, training must use a training subset"
 
             class_logits, speaker_logits = model(x, alpha=alpha)
@@ -142,8 +142,8 @@ def evaluate(
     total_classifier_loss = 0.0
     n_correct = 0
     fp, fn, tp, tn = 0, 0, 0, 0
-    y_true, y_probas = [], []
-    for (x,y,_) in tqdm(eval_loader, desc="[Evaluation]", position=1, leave=False):
+    y_true, y_probas, bac_values = [], [], []
+    for (x,y,metadata) in tqdm(eval_loader, desc="[Evaluation]", position=1, leave=False):
         x: Tensor = x.to(device) # [B,d_input]
         y = y.to(device) # class label (intoxicated vs sober)
 
@@ -156,9 +156,11 @@ def evaluate(
 
         y_true.append(y.cpu().numpy())
         y_probas.append(y_prob.cpu().numpy())
+        bac_values.append(metadata["bac"].cpu().numpy())
     total_classifier_loss = total_classifier_loss / len(eval_loader)
     y_true = np.concatenate(y_true)
     y_probas = np.concatenate(y_probas)
+    bac_values = np.concatenate(bac_values)
 
     # Precision-Recall Curve & optimal threshold
     pr_precision, pr_recall, pr_thresholds = precision_recall_curve(y_true, y_probas)
@@ -194,6 +196,7 @@ def evaluate(
         log_evaluation_figures(
             y_true=y_true,
             y_probas=y_probas,
+            bac_values=bac_values,
             pr_precision=pr_precision,
             pr_recall=pr_recall,
             confusion_matrix=(tp, tn, fp, fn),
