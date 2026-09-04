@@ -10,6 +10,7 @@ from alc_data import ALCData
 from dac218_data import DAC218Data
 from functools import partial
 from dataclasses import asdict
+from uuid import uuid4
 from utils.hpo_status import filter_study
 from train import train, evaluate, objective
 from utils.argument_parsing import parse_args
@@ -30,7 +31,7 @@ def main():
     else:
         max_samples = (1000 if p.dev_run else None)
     verbose = args.verbose
-    run_name = args.run_name
+    run_name = args.run_name or f"dann-{uuid4().hex[:8]}"
     SEED = args.seed
     seed_everything(SEED)
 
