@@ -76,12 +76,14 @@ def log_evaluation_figures(
     intoxicated_mask = bac_values != 0
     bac_fig, bac_ax = plt.subplots(figsize=(5, 4), dpi=120)
     if intoxicated_mask.any():
+        max_bac = float(bac_values[intoxicated_mask].max())
         bac_ax.scatter(
             bac_values[intoxicated_mask],
             y_probas[intoxicated_mask],
             alpha=0.65,
         )
     else:
+        max_bac = 1.0
         bac_ax.text(
             0.5,
             0.5,
@@ -94,6 +96,7 @@ def log_evaluation_figures(
         title=f"{eval_type} BAC versus P(drunk)",
         xlabel="BAC (‰)",
         ylabel="P(drunk)",
+        xlim=(0.0, 1.1 * max_bac),
         ylim=(-0.02, 1.02),
     )
     bac_ax.grid(alpha=0.3)
