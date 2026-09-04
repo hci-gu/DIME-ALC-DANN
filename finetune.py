@@ -46,6 +46,7 @@ def main():
     data = DAC218Data(
         max_samples=max_samples,
         seed=SEED,
+        lower_bac_limit=args.bac_limit,
         verbose=verbose
     )
 
@@ -106,6 +107,7 @@ def main():
                 "dataset": "dac",
                 "max_samples": max_samples if max_samples is not None else "all",
                 "pos_weight": pos_weight.item() if pos_weight is not None else "disabled",
+                "lower_bac_limit": args.bac_limit,
                 "source_checkpoint": checkpoint_name,
                 "finetune_extractor_lr": optimizer.param_groups[0]["lr"],
                 "finetune_classifier_lr": optimizer.param_groups[1]["lr"],

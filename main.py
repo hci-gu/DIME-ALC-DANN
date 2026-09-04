@@ -48,12 +48,14 @@ def main():
         data = ALCData(
             max_samples=max_samples,
             seed=SEED,
+            lower_bac_limit=args.bac_limit,
             verbose=verbose
         )
     elif args.data.lower() == "dac":
         data = DAC218Data(
             max_samples=max_samples,
             seed=SEED,
+            lower_bac_limit=args.bac_limit,
             verbose=verbose
         )
     else:
@@ -87,6 +89,7 @@ def main():
                 "dataset": args.data,
                 "pos_weight": pos_weight.item() if pos_weight is not None else "disabled",
                 "optim_metric": p.optim_metric,
+                "lower_bac_limit": args.bac_limit,
                 "dev_run": p.dev_run,
                 "n_trials": N_TRIALS,
                 "n_warmup_trials": N_WARMUP_TRIALS,
@@ -158,6 +161,7 @@ def main():
             mlflow.log_params({
                 "dataset": args.data,
                 "pos_weight": pos_weight.item() if pos_weight is not None else "disabled",
+                "lower_bac_limit": args.bac_limit,
                 "max_samples": max_samples if max_samples is not None else "all",
                 **asdict(p)
                 })

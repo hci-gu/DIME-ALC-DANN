@@ -1,5 +1,11 @@
 import argparse
 
+def non_negative_float(value: str) -> float:
+    parsed = float(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative float")
+    return parsed
+
 def non_negative_int(value: str) -> int:
     parsed = int(value)
     if parsed < 0:
@@ -26,6 +32,7 @@ def parse_args(profile: str = "main") -> argparse.Namespace:
         parser.add_argument("--seed", type=int, default=1999)
         parser.add_argument("--n-workers", "--num-workers", dest="n_workers", type=non_negative_int, default=None)
         parser.add_argument("--n-epochs", "--num-epochs", dest="n_epochs", type=positive_int, default=None)
+        parser.add_argument("--bac-limit", type=non_negative_float, default=None)
         parser.add_argument("--max-samples", type=positive_int, default=None)
         parser.add_argument("--data", choices=["alc", "dac"], default="alc")
     elif profile == "finetune":
@@ -40,6 +47,7 @@ def parse_args(profile: str = "main") -> argparse.Namespace:
         parser.add_argument("--seed", type=int, default=1999)
         parser.add_argument("--n-workers", "--num-workers", dest="n_workers", type=non_negative_int, default=None)
         parser.add_argument("--n-epochs", "--num-epochs", dest="n_epochs", type=positive_int, default=None)
+        parser.add_argument("--bac-limit", type=non_negative_float, default=None)
         parser.add_argument("--max-samples", type=positive_int, default=None)
     elif profile == "inference":
         parser = argparse.ArgumentParser(description="Run inference for a logged DANN model")

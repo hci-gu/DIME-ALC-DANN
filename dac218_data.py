@@ -19,7 +19,7 @@ class DAC218Data(Dataset):
         data_path = None,
         transforms = None,
         max_samples: int = None,
-        lower_limit_bac: float = None, # promille
+        lower_bac_limit: float = None, # promille
         seed: int = 1999,
         verbose: bool = False
         ):
@@ -36,7 +36,7 @@ class DAC218Data(Dataset):
         self.transforms = transforms
         self.verbose = verbose
         self.max_samples = max_samples
-        self.lower_limit_bac = lower_limit_bac
+        self.lower_bac_limit = lower_bac_limit
         self.seed = seed
         self.is_cached = False
         self.is_split = False
@@ -89,7 +89,7 @@ class DAC218Data(Dataset):
                 raise ValueError(
                     f"Invalid BAC value for {audio_file}: {bac_per_mille}"
                 )
-            if (self.lower_limit_bac is not None) and (self.lower_limit_bac > bac_per_mille > 0):
+            if (self.lower_bac_limit is not None) and (self.lower_bac_limit > bac_per_mille > 0):
                 if self.verbose: print(f"Skipped audio file")
                 continue
 
