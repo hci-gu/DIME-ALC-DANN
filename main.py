@@ -168,6 +168,18 @@ def main():
                 })
 
             # Log data metadata
+            mlflow.log_dict(
+                {
+                    "n_samples": len(data),
+                    "n_speakers": len(set(data.speaker_ids)),
+                    "train": {"n_samples": len(train_data), "n_speakers": len(data.train_speakers_id)},
+                    "validation": {"n_samples": len(val_data), "n_speakers": len(data.val_speakers_id)},
+                    "test": {"n_samples": len(test_data), "n_speakers": len(data.test_speakers_id)},
+                },
+                "dataset_summary.json"
+            )
+
+            # Log data metadata
             mlflow.log_dict(data.get_split_speakers(),"speaker_data_split.json")
 
             # Start training

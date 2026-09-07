@@ -39,6 +39,12 @@ class Params():
     scheduler_patience: int = 5
     scheduler_mode: str = "max"
 
+    # Adversial Scheduler
+    adversial_scheduler_n_epochs: int = n_epochs
+    adversial_scheduler_gamma: float = 10.0
+    adversial_scheduler_mode: str = "constant"
+    adversial_scheduler_weight: float = 1.0
+
     # Extractor
     extractor_input_dimension: int = 6373
     extractor_hidden_dimension: int = 256

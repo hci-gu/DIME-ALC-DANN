@@ -14,7 +14,7 @@ from dataclasses import asdict, replace
 from torch.utils.data import DataLoader
 from utils.early_stopping import EarlyStopping
 from utils.seed_control import seed_everything
-from utils.compute_params import alpha_schedule
+from utils.compute_params import alpha_schedule, AdversialScheduler
 from utils.figure_logging import log_evaluation_figures
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from sklearn.metrics import roc_auc_score, precision_recall_curve
@@ -34,6 +34,7 @@ def train(
     scheduler = ReduceLROnPlateau(optimizer=optimizer, **p.get_vars_from_prefix("scheduler"))
     device = torch.device(p.device)
     classifier_loss_fn, discriminator_loss_fn = loss_functions # Unpack loss functions
+    alpha_scheduler = AdversialScheduler(**p.get_vars_from_prefix("adversial_scheduler"))
 
 
     if p.verbose: print(f"Started training with device: {p.device}")
@@ -41,7 +42,7 @@ def train(
     train_pbar = tqdm(range(p.n_epochs), desc="Training", position=0)
     for epoch in train_pbar:
 
-        alpha = alpha_schedule(epoch, p.n_epochs)
+        alpha = alpha_scheduler(epoch)
         mlflow.log_metric("alpha",alpha, step=epoch)
 
         # Train pass
