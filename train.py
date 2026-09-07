@@ -14,7 +14,7 @@ from dataclasses import asdict, replace
 from torch.utils.data import DataLoader
 from utils.early_stopping import EarlyStopping
 from utils.seed_control import seed_everything
-from utils.compute_params import alpha_schedule, AdversialScheduler
+from utils.compute_params import AdversialScheduler
 from utils.figure_logging import log_evaluation_figures
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from sklearn.metrics import roc_auc_score, precision_recall_curve
