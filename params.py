@@ -46,6 +46,7 @@ class Params():
     extractor_output_dimension: int = 1024
     extractor_activation_function: str = "gelu"
     extractor_p_dropout: float = 0.4
+    extractor_use_layer_norm: bool = True
 
     # Classifier
     classifier_input_dimension: int = extractor_output_dimension
@@ -54,6 +55,7 @@ class Params():
     classifier_output_dimension: int = 1
     classifier_activation_function: str = "gelu"
     classifier_p_dropout: float = 0.4
+    classifier_use_layer_norm: bool = False
 
     # Discriminator
     discriminator_input_dimension: int = extractor_output_dimension
@@ -62,6 +64,7 @@ class Params():
     discriminator_output_dimension: int = 10
     discriminator_activation_function: str = "gelu"
     discriminator_p_dropout: float = 0.4
+    discriminator_use_layer_norm: bool = False
 
     @classmethod
     def from_optional_overrides(cls, **overrides):

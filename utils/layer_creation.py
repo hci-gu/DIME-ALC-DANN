@@ -57,6 +57,8 @@ def create_mlp(config) -> nn.Sequential:
             config["hidden_dimension"],
         )
     )
+    if config["use_layer_norm"]:
+        layers.append(nn.LayerNorm(config["hidden_dimension"]))
     layers.append(get_activation(config["activation_function"]))
 
     if config["p_dropout"] > 0:
@@ -70,6 +72,8 @@ def create_mlp(config) -> nn.Sequential:
                 config["hidden_dimension"],
             )
         )
+        if config["use_layer_norm"]:
+            layers.append(nn.LayerNorm(config["hidden_dimension"]))
         layers.append(get_activation(config["activation_function"]))
 
         if config["p_dropout"] > 0:
