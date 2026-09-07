@@ -44,7 +44,7 @@ class Params():
     adversial_scheduler_gamma: float = 10.0
     adversial_scheduler_mode: str = "logistic"
     adversial_scheduler_weight: float = 1.0 # Used for constant mode
-    adversial_scheduler_max_weight: float = 0.25 # Use for logistic mode
+    adversial_scheduler_max_alpha: float = 0.25 # Use for logistic mode
 
     # Extractor
     extractor_input_dimension: int = 6373
