@@ -864,9 +864,11 @@ dependencies = [
     { name = "librosa" },
     { name = "matplotlib" },
     { name = "mlflow" },
+    { name = "nvidia-ml-py" },
     { name = "opensmile" },
     { name = "optuna" },
     { name = "praat-parselmouth" },
+    { name = "psutil" },
     { name = "scipy" },
     { name = "tensorboard" },
     { name = "torch-summary" },
@@ -894,9 +896,11 @@ requires-dist = [
     { name = "librosa", specifier = ">=0.11.0" },
     { name = "matplotlib", specifier = ">=3.11.0" },
     { name = "mlflow", specifier = ">=3.14.0" },
+    { name = "nvidia-ml-py", specifier = ">=13.610.43" },
     { name = "opensmile", specifier = ">=2.6.0" },
     { name = "optuna", specifier = ">=4.9.0" },
     { name = "praat-parselmouth", specifier = ">=0.4.7" },
+    { name = "psutil", specifier = ">=7.2.2" },
     { name = "scipy", specifier = ">=1.18.0" },
     { name = "tensorboard", specifier = ">=2.21.0" },
     { name = "torch", marker = "extra == 'cpu'", specifier = ">=2.11.0", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "dime-alc-dann", extra = "cpu" } },
@@ -2395,6 +2399,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/46/e1/cdc1797eadf82d3a9a575a19b33fdc871a97edbec42c00b5b5e914f4aff4/nvidia_cusparselt_cu13-0.8.1-py3-none-manylinux2014_aarch64.whl", hash = "sha256:4dca476c50bf4780d46cd0bfbd82e2bc10a08e4fef7950917ce8d7578d22a23f", size = 221051344, upload-time = "2025-09-05T18:49:51.289Z" },
     { url = "https://files.pythonhosted.org/packages/34/7d/2661f2fb3ac4302f3a246f5fc030213ac60c1fe0bce84f9783dbd831dbb7/nvidia_cusparselt_cu13-0.8.1-py3-none-manylinux2014_x86_64.whl", hash = "sha256:786ce87568c303fadb5afcc7102d454cd3040d75f6f8626f5db460d1871f4dd0", size = 170148586, upload-time = "2025-09-05T18:50:50.248Z" },
     { url = "https://files.pythonhosted.org/packages/31/83/f3647ce26916c94a6ca4ff1810623e2c405cff2dea6e78d29516b2514df9/nvidia_cusparselt_cu13-0.8.1-py3-none-win_amd64.whl", hash = "sha256:dccbd362f91a7b9024d1f55ee9f548ac065027ff15d8c8b0db889ab3a8f31215", size = 156885108, upload-time = "2025-09-05T18:51:35.958Z" },
+]
+
+[[package]]
+name = "nvidia-ml-py"
+version = "13.610.43"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/b5/a8fbc356f768fa5c9cfd646668fd7d34bf55bdd1c6e20754642a64d930d4/nvidia_ml_py-13.610.43.tar.gz", hash = "sha256:65437eb73d68d0c62c931ca4d45038472faff03bd0b8729abba4b899f70d60f2", size = 52109, upload-time = "2026-06-01T18:54:08.829Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/23/45/caa600acfab94560807a20a64b5830d2cd3c3202b7f1328644d70b7d6bd8/nvidia_ml_py-13.610.43-py3-none-any.whl", hash = "sha256:f13c72698edef492f985cc225f14faafe68ae065a2e407f45bdf6f4b9b43fde8", size = 53163, upload-time = "2026-06-01T18:54:07.704Z" },
 ]
 
 [[package]]
