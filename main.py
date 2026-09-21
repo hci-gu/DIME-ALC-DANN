@@ -38,6 +38,8 @@ def main():
     # Mlflow tracking
     experiment_name = "DANN"
     mlflow.set_experiment(experiment_name)
+    if p.system_logging:
+        mlflow.enable_system_metrics_logging()
     print(f"Starting Experiment: ### {experiment_name} ###")
     print(f"Using MLflow Tracking URI: {mlflow.get_tracking_uri()}")
 
