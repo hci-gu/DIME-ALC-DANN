@@ -232,31 +232,35 @@ def objective(trial: Trial, train_data, val_data, base_params: Params, pos_weigh
     seed_everything(base_params.seed)
 
     # HPO parameters
-    batch_size = trial.suggest_categorical("batch_size", [512, 1024, 2048])
 
-    extractor_n_layers = trial.suggest_int("extractor_n_layers", low=1, high=5)
-    extractor_hidden_dimension = trial.suggest_categorical("extractor_hidden_dimension", [64,128,256,512])
-    extractor_output_dimension = trial.suggest_categorical("extractor_output_dimension", [64,128,256,512,1024])
+    extractor_n_layers = trial.suggest_int("extractor_n_layers", low=2, high=5)
+    extractor_hidden_dimension = trial.suggest_categorical("extractor_hidden_dimension", [8,16,32,64,128,256])
+    extractor_output_dimension = trial.suggest_categorical("extractor_output_dimension", [8,16,32,64,128,256,512])
 
-    classifier_n_layers = trial.suggest_int("classifier_n_layers", low=1, high=5)
-    classifier_hidden_dimension = trial.suggest_categorical("classifier_hidden_dimension", [64,128,256,512])
+    classifier_n_layers = trial.suggest_int("classifier_n_layers", low=1, high=4)
+    classifier_hidden_dimension = trial.suggest_categorical("classifier_hidden_dimension", [8,16,32,64,128,256,512])
 
-    discriminator_n_layers = trial.suggest_int("discriminator_n_layers", low=1, high=5)
-    discriminator_hidden_dimension = trial.suggest_categorical("discriminator_hidden_dimension", [64,128,256,512])
+    discriminator_n_layers = trial.suggest_int("discriminator_n_layers", low=1, high=3)
+    discriminator_hidden_dimension = trial.suggest_categorical("discriminator_hidden_dimension", [8,16,32,64,128,256,512])
 
-    activation_function = trial.suggest_categorical("activation_function", ["relu", "leaky_relu", "gelu", "tanh", "sigmoid"])
-    p_dropout = trial.suggest_float("p_dropout", 0, 0.5)
+    activation_function = trial.suggest_categorical("activation_function", ["silu", "gelu"])
+    extractor_p_dropout = trial.suggest_float("extractor_p_dropout", 0, 0.6)
+    classifier_p_dropout = trial.suggest_float("classifier_p_dropout", 0, 0.6)
+    discriminator_p_dropout = trial.suggest_float("discriminator_p_dropout", 0, 0.6)
+
+    extractor_use_layer_norm = trial.suggest_categorical("extractor_use_layer_norm", [True, False])
+    classifier_use_layer_norm = trial.suggest_categorical("classifier_use_layer_norm", [True, False])
+    discriminator_use_layer_norm = trial.suggest_categorical("discriminator_use_layer_norm", [True, False])
 
     # Param class
     p = replace(
         base_params,
-        batch_size=batch_size,
         extractor_activation_function=activation_function,
         classifier_activation_function=activation_function,
         discriminator_activation_function=activation_function,
-        extractor_p_dropout=p_dropout,
-        classifier_p_dropout=p_dropout,
-        discriminator_p_dropout=p_dropout,
+        extractor_p_dropout=extractor_p_dropout,
+        classifier_p_dropout=classifier_p_dropout,
+        discriminator_p_dropout=discriminator_p_dropout,
         extractor_n_layers=extractor_n_layers,
         extractor_hidden_dimension=extractor_hidden_dimension,
         extractor_output_dimension=extractor_output_dimension,
@@ -265,7 +269,10 @@ def objective(trial: Trial, train_data, val_data, base_params: Params, pos_weigh
         classifier_n_layers=classifier_n_layers,
         classifier_hidden_dimension=classifier_hidden_dimension,
         discriminator_n_layers=discriminator_n_layers,
-        discriminator_hidden_dimension=discriminator_hidden_dimension
+        discriminator_hidden_dimension=discriminator_hidden_dimension,
+        extractor_use_layer_norm=extractor_use_layer_norm,
+        classifier_use_layer_norm=classifier_use_layer_norm,
+        discriminator_use_layer_norm=discriminator_use_layer_norm
     )
 
     device = torch.device(p.device)
