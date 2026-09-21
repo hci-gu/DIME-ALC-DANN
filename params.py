@@ -17,7 +17,7 @@ class Params():
     pin_memory: bool = field(default_factory=lambda: torch.cuda.is_available())
 
     # Early stopping
-    early_stopping_patience: int | None = 30
+    early_stopping_patience: int | None = None
     early_stopping_min_delta: float = 0.0 
     early_stopping_mode: str = "max"
 
@@ -42,8 +42,8 @@ class Params():
     # Adversial Scheduler
     adversial_scheduler_n_epochs: int = n_epochs
     adversial_scheduler_gamma: float = 10.0
-    adversial_scheduler_mode: str = "logistic"
-    adversial_scheduler_weight: float = 1.0 # Used for constant mode
+    adversial_scheduler_mode: str = "constant"
+    adversial_scheduler_weight: float = 1.5 # Used for constant mode
     adversial_scheduler_max_alpha: float = 0.25 # Use for logistic mode
 
     # Extractor
