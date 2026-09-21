@@ -8,6 +8,7 @@ def get_activation(name: str) -> nn.Module:
         "gelu": nn.GELU,
         "tanh": nn.Tanh,
         "sigmoid": nn.Sigmoid,
+        "silu": nn.SiLU
     }
 
     name = name.lower()
