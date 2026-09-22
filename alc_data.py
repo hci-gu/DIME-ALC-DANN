@@ -57,7 +57,14 @@ def cache_alc_data(audio_directory_path, cache_path):
         "feature_level": feature_level.name
     }
 
-    torch.save(cache_dict, cache_path)
+    try:
+        temporary_path = cache_path + ".tmp"
+        torch.save(cache_dict, temporary_path)
+        os.replace(temporary_path, cache_path)
+        print(f"Successfully saved")
+    except Exception as error:
+        print(f"Cache save failed: {cache_path}")
+        raise RuntimeError("Could not save feature cache") from error
 
 
 class ALCData(Dataset):
@@ -135,7 +142,7 @@ class ALCData(Dataset):
         for audio_file in tqdm(matched_audio_files):
 
             # Validate correct hash
-            expected_hash = self.cache_dict["hashes"][audio_file]
+            expected_hash = self.cache_dict["hashes"].get(audio_file)
             file_hash = hash_audio_file(osp.join(self.AUDIO_PATH, audio_file))
             assert expected_hash == file_hash, f"Mismatch in sha256 hash for file: {audio_file}"
 
@@ -191,6 +198,9 @@ class ALCData(Dataset):
         self.tensors_dict = {audio_file: self.cache_dict["tensors"][audio_file] for audio_file in self.files}
 
     def calculate_mu_sigma(self, train_indices):
+        if not train_indices:
+            raise ValueError("train_indices must be a non-zero length tensor of indices")
+
         train_features = torch.stack([self.tensors_dict[self.files[train_idx]] for train_idx in train_indices])
         self.mu = train_features.mean(dim=0)
         self.sigma = train_features.std(dim=0, unbiased=False)
@@ -280,9 +290,7 @@ class ALCData(Dataset):
     def __getitem__(self, index):
 
         if not hasattr(self, "mu") or not hasattr(self, "sigma"):
-            raise RuntimeError(
-                "Call calculate_mu_sigma(train_indices) before accessing samples."
-            )
+            raise RuntimeError("Call calculate_mu_sigma(train_indices) before accessing samples.")
 
         # Retrieve relevant helper variables
         audio_file = self.files[index]

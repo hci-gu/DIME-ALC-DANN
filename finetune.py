@@ -57,7 +57,7 @@ def main():
     test_data = Subset(data, test_indices)
     p.discriminator_output_dimension = len(data.train_speakers_id) # n_speakers in train_data
     pos_weight = data.calculate_pos_weight(train_indices=train_indices).to(device) if p.use_pos_weight else None
-    data.cache(train_indices)
+    data.calculate_mu_sigma(train_indices)
 
     # DataLoaders
     train_loader = DataLoader(train_data, p.batch_size, shuffle=True, num_workers=p.n_workers, pin_memory=p.pin_memory)
