@@ -74,6 +74,11 @@ class Params():
     discriminator_p_dropout: float = 0.4
     discriminator_use_layer_norm: bool = False
 
+    def __post_init__(self):
+        self.discriminator_input_dimension = self.extractor_output_dimension
+        self.classifier_input_dimension = self.extractor_output_dimension
+        self.adversial_scheduler_n_epochs = self.n_epochs
+
     @classmethod
     def from_optional_overrides(cls, **overrides):
         field_names = {f.name for f in fields(cls)}
