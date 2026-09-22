@@ -207,7 +207,7 @@ def main() -> None:
         val_frac=0.15,
         test_frac=0.15,
     )
-    data.cache(train_indices)
+    data.calculate_mu_sigma(train_indices)
     train_data = Subset(data, train_indices)
 
     results = []

@@ -46,7 +46,7 @@ def main():
     val_data = Subset(data, val_indices)
     test_data = Subset(data, test_indices)
     pos_weight = data.calculate_pos_weight(train_indices=train_indices).to(device) if p.use_pos_weight else None
-    data.cache(train_indices)
+    data.calculate_mu_sigma(train_indices)
 
     # DataLoaders
     if p.batch_size < 2:

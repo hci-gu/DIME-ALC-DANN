@@ -1,6 +1,7 @@
 import os
 import json
 import torch
+import hashlib
 import opensmile
 import numpy as np
 import os.path as osp
@@ -8,6 +9,55 @@ import os.path as osp
 from time import time
 from tqdm import tqdm
 from torch.utils.data import Dataset, Subset
+from hashlib import sha256
+
+def hash_audio_file(file_path):
+    with open(file_path, "rb") as f:
+        digest = hashlib.file_digest(f, "sha256")
+    return digest.hexdigest()
+
+
+def cache_alc_data(audio_directory_path, cache_path):
+
+    # Read in audio files and sort them
+    files = sorted([file for file in os.listdir(audio_directory_path) if file.endswith(".wav")])
+
+    # Define Opensmile pre-processor
+    feature_set = opensmile.FeatureSet.ComParE_2016
+    feature_level = opensmile.FeatureLevel.Functionals
+    processor = opensmile.Smile(
+        feature_set=feature_set,
+        feature_level=feature_level
+    )
+
+    os.makedirs(".cache", exist_ok=True)
+    if os.path.exists(cache_path):
+        raise RuntimeError(f"Cache file {cache_path} already exists. Delete it to process a new one")
+    cache_data_dict = {}
+    file_hashes = {}
+    for audio_file in tqdm(files):
+        audio_path = osp.join(audio_directory_path, audio_file)
+
+        # Pre-process audio file
+        x = torch.tensor(processor.process_file(audio_path).to_numpy(), dtype=torch.float32).squeeze(0)
+        cache_data_dict[audio_file] = x
+
+        # Calculate hash
+        file_hash = hash_audio_file(audio_path)
+        file_hashes[audio_file] = file_hash
+
+    # Check that the processed values produce finite values
+    if not torch.isfinite(torch.stack(list(cache_data_dict.values()))).all():
+        raise RuntimeError("OpenSMILE features contain NaN or infinite values")
+
+    cache_dict = {
+        "tensors": cache_data_dict,
+        "hashes": file_hashes,
+        "feature_set": feature_set.name,
+        "feature_level": feature_level.name
+    }
+
+    torch.save(cache_dict, cache_path)
 
 
 class ALCData(Dataset):
@@ -26,17 +76,12 @@ class ALCData(Dataset):
         self.ROOT = data_path if data_path else osp.join("data","ALC")
         self.AUDIO_PATH = osp.join(self.ROOT,"wav","h")
         self.LABELS_PATH = osp.join(self.ROOT,"labels","h")
-        self.processor = opensmile.Smile(
-            feature_set=opensmile.FeatureSet.ComParE_2016,
-            feature_level=opensmile.FeatureLevel.Functionals,
-        )
         self.class_mapping = {"na": 0, "a": 1}
         self.transforms = transforms
         self.verbose = verbose
         self.max_samples = max_samples
         self.lower_bac_limit = lower_bac_limit
         self.seed = seed
-        self.is_cached = False
         self.is_split = False
         self.train_speaker_mapping = {}
 
@@ -46,6 +91,16 @@ class ALCData(Dataset):
 
     def prepare(self):
         """ Prepares the data before training """
+
+        # Load in cache file
+        try:
+            cache_path = osp.join(".cache","alc-opensmile-features.pt")
+            self.cache_dict = torch.load(cache_path, map_location="cpu")
+        except Exception as e:
+            raise FileNotFoundError(f"Failed to load in cache file: {e}")
+
+        assert self.cache_dict["feature_set"] == "ComParE_2016"
+        assert self.cache_dict["feature_level"] == "Functionals"
 
         # Read in all files from paths
         self.audio_files = sorted([file for file in os.listdir(self.AUDIO_PATH) if file.endswith(".wav")])
@@ -78,6 +133,11 @@ class ALCData(Dataset):
         self.speaker_ids = [] # list of speaker ids (duplicates can occur)
         self.bac_values = [] # blood alcohol concentration in per mille
         for audio_file in tqdm(matched_audio_files):
+
+            # Validate correct hash
+            expected_hash = self.cache_dict["hashes"][audio_file]
+            file_hash = hash_audio_file(osp.join(self.AUDIO_PATH, audio_file))
+            assert expected_hash == file_hash, f"Mismatch in sha256 hash for file: {audio_file}"
 
             label_file = audio_label_mapping[audio_file]
 
@@ -122,65 +182,21 @@ class ALCData(Dataset):
         self.class_labels = torch.tensor(self.class_labels, dtype=torch.int64)
         self.len = len(self.class_labels)
 
+        # Check for missing files
+        missing_files = [audio_file for audio_file in self.files if (audio_file not in self.cache_dict["tensors"])]
+        if missing_files:
+            raise FileNotFoundError(f"Could not find cached tensor for {len(missing_files)} files.First missing file: {missing_files[0]}")
 
-    def cache(self, train_indices=None):
+        # Filter our files
+        self.tensors_dict = {audio_file: self.cache_dict["tensors"][audio_file] for audio_file in self.files}
 
-        # Look in .cache and see if the data is stored load and return
-        os.makedirs(".cache", exist_ok=True)
-        cache_path = osp.join(".cache","alc-opensmile-features.pt")
-        if osp.exists(cache_path):
-
-            if self.verbose: print(f"Loading pre-processed audio features from cache: {cache_path}")
-
-            # Load from disk
-            all_features = torch.load(cache_path, map_location="cpu")
-
-            # Check for missing files
-            missing_files = [audio_file for audio_file in self.files if audio_file not in all_features]
-            if missing_files:
-                raise FileNotFoundError(
-                    f"Could not find cached tensor for {len(missing_files)} files. "
-                    f"First missing file: {missing_files[0]}"
-                )
-
-            # Filter our files
-            self.cache_dict = {
-                audio_file: all_features[audio_file]
-                for audio_file in self.files
-            }
-
-            del all_features
-
-        else: # Calculate features
-
-            if self.verbose: print(f"Calculating and caching audio preprocessing")
-            self.cache_dict = {}
-            feature_tensor = [] # Use to compute Z-score standardization constants
-            for audio_file in tqdm(self.files):
-                audio_path = osp.join(self.AUDIO_PATH, audio_file)
-                x = torch.tensor(self.processor.process_file(audio_path).to_numpy(), dtype=torch.float32).squeeze(0)
-                feature_tensor.append(x)
-                self.cache_dict[audio_file] = x
-            feature_tensor = torch.stack(feature_tensor)
-
-
-            # If file does not exist save to disk for future
-            if self.max_samples is None:
-                torch.save(self.cache_dict, cache_path)
-            elif self.verbose:
-                print("Skipping persistent feature cache because max_samples is set")
-
-        # Calculate mu, sigma based on train indices
-        feature_tensor = torch.stack([self.cache_dict[file] for file in self.files])
-        if not torch.isfinite(feature_tensor).all():
-            raise RuntimeError("OpenSMILE features contain NaN or infinite values")
-
-        train_features = feature_tensor if (train_indices is None) else feature_tensor[train_indices]
+    def calculate_mu_sigma(self, train_indices):
+        train_features = torch.stack([self.tensors_dict[self.files[train_idx]] for train_idx in train_indices])
         self.mu = train_features.mean(dim=0)
-        self.sigma = train_features.std(dim=0)
+        self.sigma = train_features.std(dim=0, unbiased=False)
+        if self.verbose:
+            print(f"Training samples: {len(train_features)} Shape: {train_features.shape}. mu: {self.mu.shape}, sigma: {self.sigma.shape}")
     
-        self.is_cached = True
-
     def calculate_pos_weight(self, train_indices):
         train_labels = self.class_labels[train_indices]
         n_pos = train_labels.sum()
@@ -262,6 +278,13 @@ class ALCData(Dataset):
 
 
     def __getitem__(self, index):
+
+        if not hasattr(self, "mu") or not hasattr(self, "sigma"):
+            raise RuntimeError(
+                "Call calculate_mu_sigma(train_indices) before accessing samples."
+            )
+
+        # Retrieve relevant helper variables
         audio_file = self.files[index]
         speaker_id = int(audio_file[:3])
         class_label = self.class_labels[index]
@@ -277,14 +300,16 @@ class ALCData(Dataset):
             "bac": self.bac_values[index]
         }
 
-        if self.is_cached:
-            x = self.cache_dict[audio_file]
-        else:
-            audio_path = osp.join(self.AUDIO_PATH, audio_file)
-            x = torch.tensor(self.processor.process_file(audio_path).to_numpy(), dtype=torch.float32).squeeze(0)
+        try:
+            x = self.tensors_dict[audio_file]
+        except KeyError as e:
+            raise KeyError(f"Could not read in processed tensor for audio file: {audio_file}") from e
         
         # Z-score standardization
-        x = torch.where(self.sigma > 0, (x - self.mu) / self.sigma, torch.zeros_like(x))
+        try:
+            x = torch.where(self.sigma > 0, (x - self.mu) / self.sigma, torch.zeros_like(x))
+        except Exception as e:
+            raise RuntimeError(f" Failed to normalize audio tensor. Error: {e}")
 
         if self.transforms:
             x = self.transforms(x)
@@ -309,24 +334,28 @@ class ALCData(Dataset):
 
 if __name__ == "__main__":
 
-    print(f"Loading data...")
-    t = time()
-    data = ALCData(
-        max_samples=None,
-        verbose=True,
-    )
-    data.cache()
-    t_tot = time() - t
-    print(f"Total time to setup dataset: {t_tot:.2f} s")
-    print(f"Number of data samples: {len(data)}")
+    audio_directory_path = osp.join("data","ALC","wav","h")
+    cache_path = osp.join(".cache","alc-opensmile-features.pt")
+    cache_alc_data(audio_directory_path, cache_path)
 
-    # Train/Val/Test splitting
-    train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.8, val_frac=0.1, test_frac=0.1)
-    train_data = Subset(data, train_indices)
+    # print(f"Loading data...")
+    # t = time()
+    # data = ALCData(
+    #     max_samples=None,
+    #     verbose=True,
+    # )
+    # data.cache()
+    # t_tot = time() - t
+    # print(f"Total time to setup dataset: {t_tot:.2f} s")
+    # print(f"Number of data samples: {len(data)}")
 
-    # Get 5 random sample
-    x, y, s, files = train_data.dataset.get_example_sample(5)
-    print("x-shape:",x.shape," y-shape",y.shape," s-shape",s.shape)
-    print("Class labels:",y)
-    print("Local Speaker Index",s)
-    print("Files:",files)
+    # # Train/Val/Test splitting
+    # train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.8, val_frac=0.1, test_frac=0.1)
+    # train_data = Subset(data, train_indices)
+
+    # # Get 5 random sample
+    # x, y, s, files = train_data.dataset.get_example_sample(5)
+    # print("x-shape:",x.shape," y-shape",y.shape," s-shape",s.shape)
+    # print("Class labels:",y)
+    # print("Local Speaker Index",s)
+    # print("Files:",files)
