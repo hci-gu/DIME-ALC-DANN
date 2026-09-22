@@ -52,12 +52,13 @@ def train(
         n_correct_classifier = 0.0
         n_correct_discriminator = 0.0
         for batch_idx, (x, y, metadata) in enumerate(tqdm(train_loader, desc="[Batch]", position=1, leave=False)):
-            if p.dev_run and batch_idx > 3: break
+            if p.dev_run and batch_idx > 3: break # Only to validate no runtime errors, metrics should not be interpreted
 
             t_batch_start = time()
             x = x.to(device)
             y = y.to(device, dtype=torch.float32) # class label (intoxicated vs sober)
             s = metadata["local_index"].to(device, dtype=torch.long) # speaker local index
+            batch_size = y.numel()
             assert (s >= 0).all(), f"Detected negative speaker_id, training must use a training subset"
 
             class_logits, speaker_logits = model(x, alpha=alpha)
@@ -65,14 +66,14 @@ def train(
             # Classifier and Discriminator accuracy
             n_correct_classifier += ((class_logits.squeeze(-1) >= 0.0) == y.to(torch.bool)).sum().item() # Naive 0.5 sigmoid-threshold 
             n_correct_discriminator += (speaker_logits.argmax(dim=1) == s).sum().item()
-            n_examples += y.numel()
+            n_examples += batch_size
 
             # Classifier and Discriminator loss
             classifier_loss = classifier_loss_fn(class_logits.squeeze(-1), y)
             discriminator_loss = discriminator_loss_fn(speaker_logits, s)
 
             loss = classifier_loss + discriminator_loss
-            train_loss += loss.item()
+            train_loss += loss.item() * batch_size
 
             optimizer.zero_grad()
             loss.backward()
@@ -89,7 +90,7 @@ def train(
                 },
                 step=global_step
             )
-        train_loss = train_loss / len(train_loader)
+        train_loss = train_loss / n_examples
         classifier_accuracy = n_correct_classifier / n_examples
         discriminator_accuracy = n_correct_discriminator / n_examples
         mlflow.log_metrics(
@@ -147,18 +148,19 @@ def evaluate(
     for (x,y,metadata) in tqdm(eval_loader, desc="[Evaluation]", position=1, leave=False):
         x: Tensor = x.to(device) # [B,d_input]
         y = y.to(device) # class label (intoxicated vs sober)
+        batch_size = y.numel()
 
         class_logits = model.predict(x) if hasattr(model, "predict") else model(x)
         y_prob = torch.sigmoid(class_logits.squeeze(-1))
         y = y.bool()
 
         # Loss
-        total_classifier_loss += classifier_loss_fn(class_logits.squeeze(-1), y.to(torch.float32)).item()
+        total_classifier_loss += classifier_loss_fn(class_logits.squeeze(-1), y.to(torch.float32)).item() * batch_size
 
         y_true.append(y.cpu().numpy())
         y_probas.append(y_prob.cpu().numpy())
         bac_values.append(metadata["bac"].cpu().numpy())
-    total_classifier_loss = total_classifier_loss / len(eval_loader)
+    total_classifier_loss = total_classifier_loss / len(eval_loader.dataset)
     y_true = np.concatenate(y_true)
     y_probas = np.concatenate(y_probas)
     bac_values = np.concatenate(bac_values)
@@ -218,7 +220,7 @@ def evaluate(
         "auroc": auroc,
         "balanced_accuracy": balanced_accuracy,
         "specificity": specificity,
-        "best_threshold": round(best_threshold, 4),
+        "best_threshold": best_threshold,
         "tp": tp,
         "tn": tn,
         "fp": fp,

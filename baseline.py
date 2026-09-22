@@ -105,17 +105,20 @@ def main():
             # Train pass
             model.train()
             train_loss = 0.0
+            n_examples = 0
             for batch_idx, (x,y,_) in enumerate(tqdm(train_loader, desc="[Batch]", position=1, leave=False)):
                 if p.dev_run and batch_idx > 3: break
                 t_batch_start = time()
                 x = x.to(device)
                 y = y.to(device, dtype=torch.float32) # class label (intoxicated vs sober)
+                batch_size = y.numel()
+                n_examples += batch_size
 
                 class_logits = model(x)
 
                 loss = classifier_loss_fn(class_logits.squeeze(-1), y)
 
-                train_loss += loss.item()
+                train_loss += loss.item() * batch_size
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -128,7 +131,7 @@ def main():
                     "train_batch_loss": loss.item(),
                 }, step=global_step
                 )
-            train_loss = train_loss / len(train_loader)
+            train_loss = train_loss / n_examples
 
             # Validation step
             val_metrics = evaluate(model, p, classifier_loss_fn, val_loader, device, epoch=epoch)
