@@ -104,6 +104,8 @@ class DAC218Data(Dataset):
         try:
             cache_path = osp.join(".cache","dac-opensmile-features.pt")
             self.cache_dict = torch.load(cache_path, map_location="cpu")
+            if self.verbose:
+                print(f"Loaded in cache | FS: {self.cache_dict["feature_set"]} | FL: {self.cache_dict["feature_level"]} | Files: {len(self.cache_dict["tensors"])}")
         except Exception as e:
             raise FileNotFoundError(f"Failed to load in cache file: {e}")
 
