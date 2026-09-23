@@ -1,6 +1,7 @@
 import os
 import json
 import torch
+import random
 import hashlib
 import opensmile
 import numpy as np
@@ -126,10 +127,10 @@ class ALCData(Dataset):
         
         matched_audio_files = list(audio_label_mapping.keys())
         if self.max_samples:
-            generator = torch.Generator().manual_seed(self.seed)
-            perm = torch.randperm(len(matched_audio_files), generator=generator).tolist()
-            matched_audio_files = [matched_audio_files[i] for i in perm]
-            matched_audio_files = matched_audio_files[:self.max_samples]
+            generator = random.Random(self.seed)
+            selected_files = self.audio_files.copy()
+            generator.shuffle(selected_files)
+            matched_audio_files = selected_files[:self.max_samples]
 
         if self.verbose:
             print(f"Loaded in {len(matched_audio_files)} files ({len(self.audio_files)} total)")
@@ -143,6 +144,8 @@ class ALCData(Dataset):
 
             # Validate correct hash
             expected_hash = self.cache_dict["hashes"].get(audio_file)
+            if expected_hash is None:
+                raise FileNotFoundError(f"No cached hash for audio file: {audio_file}")
             file_hash = hash_audio_file(osp.join(self.AUDIO_PATH, audio_file))
             assert expected_hash == file_hash, f"Mismatch in sha256 hash for file: {audio_file}"
 
@@ -198,8 +201,8 @@ class ALCData(Dataset):
         self.tensors_dict = {audio_file: self.cache_dict["tensors"][audio_file] for audio_file in self.files}
 
     def calculate_mu_sigma(self, train_indices):
-        if not train_indices:
-            raise ValueError("train_indices must be a non-zero length tensor of indices")
+        if len(train_indices) == 0:
+            raise ValueError("train_indices must not be empty")
 
         train_features = torch.stack([self.tensors_dict[self.files[train_idx]] for train_idx in train_indices])
         self.mu = train_features.mean(dim=0)
