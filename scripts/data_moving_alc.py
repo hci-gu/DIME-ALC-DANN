@@ -41,10 +41,13 @@ for (root,dirs,files) in os.walk(ROOT_DIR,topdown=True):
         if dry_run:
             print(f"[{idx:5}] | Copied file {source_path} -> {target_path}")
         else:
-            print(f"[{idx:5}] | Copied file {source_path} -> {target_path}")
-            try:
-                shutil.copy(source_path,target_path)
-            except:
+            if os.path.exists(target_path):
                 print(f"File {target_path} already exists")
+            else:
+                try:
+                    shutil.copy2(source_path, target_path)
+                    print(f"[{idx:5}] | Copied file {source_path} -> {target_path}")
+                except OSError as error:
+                    raise OSError(f"Failed to copy {source_path} to {target_path}") 
 
         idx += 1

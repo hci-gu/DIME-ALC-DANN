@@ -18,7 +18,7 @@ def hash_audio_file(file_path):
     return digest.hexdigest()
 
 
-def cache_dac_data(audio_directory_path, cache_path):
+def cache_dac_data(audio_directory_path):
 
     # Read in audio files and sort them
     files = sorted([file for file in os.listdir(audio_directory_path) if file.endswith(".wav")])
@@ -32,6 +32,7 @@ def cache_dac_data(audio_directory_path, cache_path):
     )
 
     os.makedirs(".cache", exist_ok=True)
+    cache_path = osp.join(".cache","dac-opensmile-features.pt")
     if os.path.exists(cache_path):
         raise RuntimeError(f"Cache file {cache_path} already exists. Delete it to process a new one")
     cache_data_dict = {}
@@ -330,8 +331,7 @@ class DAC218Data(Dataset):
 if __name__ == "__main__":
 
     audio_directory_path = osp.join("data","SE-DAC218","audio","wav")
-    cache_path = osp.join(".cache","dac-opensmile-features.pt")
-    cache_dac_data(audio_directory_path, cache_path)
+    cache_dac_data(audio_directory_path)
 
     # print(f"Loading data...")
     # t = time()
