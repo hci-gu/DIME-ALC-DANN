@@ -16,7 +16,7 @@ def main(model_name = None):
 
     # Parse model name
     if model_name:
-        model_path = os.path.join("weights",model_path+".pth")
+        model_path = os.path.join("weights",model_name+".pth")
     else:
         if args.run_name:
             model_path = os.path.join("weights",args.run_name+".pth")
