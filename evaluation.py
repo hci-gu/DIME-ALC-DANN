@@ -23,11 +23,11 @@ def main(model_name = None):
         else:
             raise ValueError(f"Provide either a model name ")
     
-    p = Params()
-    
 
     # Load model
     checkpoint = torch.load(model_path, map_location="cpu")
+    print(type(checkpoint))
+    print(checkpoint)
     model = DANN(checkpoint["params"])
     model.load_state_dict(checkpoint["model_state_dict"])
 
@@ -56,5 +56,5 @@ def main(model_name = None):
     
 
 if __name__ == "__main__":
-    model_name = "dann_model-nosy-colt-808"
+    model_name = "dann-01c0f372"
     main(model_name=model_name)

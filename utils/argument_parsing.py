@@ -56,7 +56,7 @@ def parse_args(profile: ArgProfile = "main") -> argparse.Namespace:
         parser.add_argument("--max-samples", type=positive_int, default=None)
     elif profile == "evaluation":
         parser = argparse.ArgumentParser(description="Run evaluation for a logged DANN model")
-        parser.add_argument("--run-name", type=str, required=True)
+        parser.add_argument("--run-name", type=str, required=False)
         parser.add_argument("--compile", action=argparse.BooleanOptionalAction, default=False)
         parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
         parser.add_argument("--seed", type=int, default=1999)
