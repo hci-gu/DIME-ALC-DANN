@@ -4,9 +4,10 @@ import torch
 from model import DANN
 from params import Params
 from alc_data import ALCData
+from train import test_evaluation
 from dac218_data import DAC218Data
+from torch.utils.data import DataLoader
 from utils.argument_parsing import parse_args
-from train import evaluate
 
 def main(model_name = None):
 
@@ -49,10 +50,15 @@ def main(model_name = None):
     else:
         raise RuntimeError(f"Unexpected data type {args.data}")
 
+    eval_loader = DataLoader(data, p.batch_size, shuffle=False, num_workers=p.n_workers, pin_memory=p.pin_memory)
 
+    evaluation_results = test_evaluation(
+        model=model,
+        p=p,
+        eval_loader=eval_loader
 
+    )
 
-    
 
 if __name__ == "__main__":
     model_name = "dann-01c0f372"

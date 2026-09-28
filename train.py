@@ -229,6 +229,110 @@ def evaluate(
     return {f"{eval_type}/{key}": value for (key,value) in metrics.items()}
 
 
+@torch.no_grad()
+def test_evaluation(
+    model: nn.Module,
+    p:Params,
+    classifier_loss_fn,
+    eval_loader: DataLoader,
+    device,
+    epoch: int = None,
+    eval_type: Literal["val","test"] = "val",
+    threshold: float|None = None
+    ) -> dict:
+
+    # Prepare model for eval
+    model.eval()
+
+    total_classifier_loss = 0.0
+    n_correct = 0
+    fp, fn, tp, tn = 0, 0, 0, 0
+    y_true, y_probas, bac_values = [], [], []
+    for (x,y,metadata) in tqdm(eval_loader, desc="[Evaluation]", position=1, leave=False):
+        x: Tensor = x.to(device) # [B,d_input]
+        y = y.to(device) # class label (intoxicated vs sober)
+        batch_size = y.numel()
+
+        class_logits = model.predict(x) if hasattr(model, "predict") else model(x)
+        y_prob = torch.sigmoid(class_logits.squeeze(-1))
+        y = y.bool()
+
+        # Loss
+        total_classifier_loss += classifier_loss_fn(class_logits.squeeze(-1), y.to(torch.float32)).item() * batch_size
+
+        y_true.append(y.cpu().numpy())
+        y_probas.append(y_prob.cpu().numpy())
+        bac_values.append(metadata["bac"].cpu().numpy())
+    total_classifier_loss = total_classifier_loss / len(eval_loader.dataset)
+    y_true = np.concatenate(y_true)
+    y_probas = np.concatenate(y_probas)
+    bac_values = np.concatenate(bac_values)
+
+    # Precision-Recall Curve & optimal threshold
+    pr_precision, pr_recall, pr_thresholds = precision_recall_curve(y_true, y_probas)
+    pr_f1 = 2 * pr_precision[:-1] * pr_recall[:-1] / (pr_precision[:-1] + pr_recall[:-1] + 1e-12)
+    if threshold is not None:
+        best_threshold = threshold
+    else:
+        best_threshold = float(pr_thresholds[pr_f1.argmax()]) if len(pr_thresholds) else 0.5
+
+    # Threshold probabilities to get vector
+    y_pred = (y_probas >= best_threshold)
+    
+    # Confusion matrix elements
+    tp = (y_pred & y_true).sum()
+    tn = (~y_pred & ~y_true).sum()
+    fp = (y_pred & ~y_true).sum()
+    fn = (~y_pred & y_true).sum()
+
+    # Accuracy, P, R, Specificity, F1
+    n_correct = (y_pred == y_true).sum()
+    accuracy = n_correct/len(eval_loader.dataset)
+    precision = tp / (tp + fp) if (tp + fp > 0) else 0.0
+    recall = tp / (tp + fn) if (tp + fn > 0) else 0.0
+    specificity = tn / (tn + fp) if (tn + fp > 0) else 0.0
+    balanced_accuracy = (recall + specificity) / 2
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall > 0) else 0.0
+
+    has_both_classes = len(set(y_true.tolist())) == 2
+    auroc = roc_auc_score(y_true, y_probas) if has_both_classes else 0.0
+
+    # Log figures every 25th epoch or on final test set
+    if (eval_type == "test") or (epoch is not None and epoch % 25 == 0):
+        log_evaluation_figures(
+            y_true=y_true,
+            y_probas=y_probas,
+            bac_values=bac_values,
+            pr_precision=pr_precision,
+            pr_recall=pr_recall,
+            confusion_matrix=(tp, tn, fp, fn),
+            auroc=auroc,
+            has_both_classes=has_both_classes,
+            eval_type=eval_type,
+            epoch=epoch,
+        )
+
+    
+    # Dictionary containing the metrics
+    metrics =  {
+        "classifier_loss": total_classifier_loss,
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "auroc": auroc,
+        "balanced_accuracy": balanced_accuracy,
+        "specificity": specificity,
+        "best_threshold": best_threshold,
+        "tp": tp,
+        "tn": tn,
+        "fp": fp,
+        "fn": fn,
+    }
+    return {f"{eval_type}/{key}": value for (key,value) in metrics.items()}
+
+
+
 def objective(trial: Trial, train_data, val_data, base_params: Params, pos_weight):
 
     seed_everything(base_params.seed)

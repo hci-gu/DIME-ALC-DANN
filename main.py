@@ -1,5 +1,6 @@
 import os
 import torch
+import random
 import optuna
 import mlflow
 import torch.nn as nn
@@ -13,7 +14,6 @@ from functools import partial
 from dataclasses import asdict
 from dac218_data import DAC218Data
 from tempfile import TemporaryDirectory
-from utils.hpo_status import filter_study
 from train import train, evaluate, objective
 from utils.argument_parsing import parse_args
 from utils.seed_control import seed_everything
@@ -22,17 +22,14 @@ from torch.utils.data import DataLoader, Subset
 
 def main(args):
 
-
     # User parameters
-    save_model = args.save_model
     p = Params.from_optional_overrides(**vars(args))
     if args.max_samples:
         max_samples = args.max_samples
     else:
         max_samples = (1000 if p.dev_run else None)
-    verbose = args.verbose
     run_name = args.run_name or f"dann-{uuid4().hex[:8]}"
-    SEED = args.seed
+    SEED = args.seed if (args.seed) else random.randint(0,2**20)
     seed_everything(SEED)
 
     # Mlflow tracking
@@ -52,14 +49,14 @@ def main(args):
             max_samples=max_samples,
             seed=SEED,
             lower_bac_limit=args.bac_limit,
-            verbose=verbose
+            verbose=args.verbose
         )
     elif args.data.lower() == "dac":
         data = DAC218Data(
             max_samples=max_samples,
             seed=SEED,
             lower_bac_limit=args.bac_limit,
-            verbose=verbose
+            verbose=args.verbose
         )
     else:
         raise RuntimeError(f"Unexpected data type {args.data}")
@@ -89,8 +86,6 @@ def main(args):
             TIMEOUT_IN_SECONDS = int(60 * 60 * 24 * DAY_BUDGET)  # In seconds
 
             mlflow.log_params({
-                "mu": data.mu,
-                "sigma": data.sigma,
                 "dataset": args.data,
                 "pos_weight": pos_weight.item() if pos_weight is not None else "disabled",
                 "optim_metric": p.optim_metric,
@@ -111,27 +106,14 @@ def main(args):
             objective_fn = partial(objective, train_data=train_data, val_data=val_data, base_params=p, pos_weight=pos_weight)
             study.optimize(objective_fn, n_trials=N_TRIALS, timeout=TIMEOUT_IN_SECONDS, catch=(torch.cuda.OutOfMemoryError))
 
-            # Analyze study trials
-            completed, failed, pruned = filter_study(study)
-
-            mlflow.log_metrics({
-                "hpo/completed_trials": len(completed),
-                "hpo/failed_trials": len(failed),
-                "hpo/pruned_trials": len(pruned),
-                "hpo/total_trials": len(study.trials),
-            })
-
-            if not completed:
-                raise RuntimeError(
-                    "HPO finished without a completed trial; "
-                    "see the failed child runs for the underlying errors."
-                )
-
             # Select the best trial parameters
             best_trial = study.best_trial
 
-            mlflow.log_metric("hpo/best_trial_number", best_trial.number)
-            mlflow.log_metric("hpo/best_objective", float(best_trial.value))
+            mlflow.log_metrics({
+                "hpo/best_trial_number": best_trial.number,
+                "hpo/total_trials": len(study.trials),
+                "hpo/best_objective": float(best_trial.value)
+                })
             mlflow.log_params({
                 f"hpo/best_{name}": value
                 for name, value in best_trial.params.items()
@@ -204,7 +186,7 @@ def main(args):
             mlflow.log_metrics(test_metrics)
 
             # Save model & optimizer
-            if save_model:
+            if args.save_model:
                 model.to("cpu")
                 run_name = mlflow.active_run().data.tags["mlflow.runName"].replace(" ", "_").replace("/", "_").replace("\\", "_")
                 save_path = os.path.join("weights", f"{run_name}.pth")

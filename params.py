@@ -50,29 +50,29 @@ class Params():
     # Extractor
     extractor_input_dimension: int = 6373
     extractor_hidden_dimension: int = 256
-    extractor_n_layers: int = 5
-    extractor_output_dimension: int = 1024
+    extractor_n_layers: int = 2
+    extractor_output_dimension: int = 8
     extractor_activation_function: str = "gelu"
     extractor_p_dropout: float = 0.4
-    extractor_use_layer_norm: bool = True
+    extractor_use_layer_norm: bool = False
 
     # Classifier
     classifier_input_dimension: int = extractor_output_dimension
-    classifier_hidden_dimension: int = 64
+    classifier_hidden_dimension: int = 128
     classifier_n_layers: int = 2
     classifier_output_dimension: int = 1
     classifier_activation_function: str = "gelu"
-    classifier_p_dropout: float = 0.4
+    classifier_p_dropout: float = 0.1
     classifier_use_layer_norm: bool = False
 
     # Discriminator
     discriminator_input_dimension: int = extractor_output_dimension
-    discriminator_hidden_dimension: int = 256
+    discriminator_hidden_dimension: int = 32
     discriminator_n_layers: int = 3
     discriminator_output_dimension: int = 10
     discriminator_activation_function: str = "gelu"
     discriminator_p_dropout: float = 0.4
-    discriminator_use_layer_norm: bool = False
+    discriminator_use_layer_norm: bool = True
 
     def __post_init__(self):
         self.discriminator_input_dimension = self.extractor_output_dimension
