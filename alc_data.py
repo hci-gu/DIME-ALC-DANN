@@ -211,6 +211,10 @@ class ALCData(Dataset):
         self.sigma = train_features.std(dim=0, unbiased=False)
         if self.verbose:
             print(f"Training samples: {len(train_features)} Shape: {train_features.shape}. mu: {self.mu.shape}, sigma: {self.sigma.shape}")
+
+    def set_mu_sigma(self, mu, sigma):
+        self.mu = mu
+        self.sigma = sigma
     
     def calculate_pos_weight(self, train_indices):
         train_labels = self.class_labels[train_indices]

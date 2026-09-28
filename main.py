@@ -4,13 +4,15 @@ import optuna
 import mlflow
 import torch.nn as nn
 
+from uuid import uuid4
 from model import DANN
+from pathlib import Path
 from params import Params
 from alc_data import ALCData
-from dac218_data import DAC218Data
 from functools import partial
 from dataclasses import asdict
-from uuid import uuid4
+from dac218_data import DAC218Data
+from tempfile import TemporaryDirectory
 from utils.hpo_status import filter_study
 from train import train, evaluate, objective
 from utils.argument_parsing import parse_args
@@ -18,10 +20,8 @@ from utils.seed_control import seed_everything
 from torch.utils.data import DataLoader, Subset
 
 
-def main():
+def main(args):
 
-    # CLI args
-    args = parse_args()
 
     # User parameters
     save_model = args.save_model
@@ -89,6 +89,8 @@ def main():
             TIMEOUT_IN_SECONDS = int(60 * 60 * 24 * DAY_BUDGET)  # In seconds
 
             mlflow.log_params({
+                "mu": data.mu,
+                "sigma": data.sigma,
                 "dataset": args.data,
                 "pos_weight": pos_weight.item() if pos_weight is not None else "disabled",
                 "optim_metric": p.optim_metric,
@@ -172,6 +174,8 @@ def main():
             # Log data metadata
             mlflow.log_dict(
                 {
+                    "mu": data.mu,
+                    "sigma": data.sigma,
                     "n_samples": len(data),
                     "n_speakers": len(set(data.speaker_ids)),
                     "train": {"n_samples": len(train_data), "n_speakers": len(data.train_speakers_id)},
@@ -203,11 +207,30 @@ def main():
             if save_model:
                 model.to("cpu")
                 run_name = mlflow.active_run().data.tags["mlflow.runName"].replace(" ", "_").replace("/", "_").replace("\\", "_")
-                save_path = os.path.join("weights", f"dann_model-{args.data}-{run_name}.pth")
+                save_path = os.path.join("weights", f"{run_name}.pth")
                 os.makedirs("weights", exist_ok=True)
-                torch.save(model, save_path)
+                torch.save(
+                    {
+                        "params": asdict(p),
+                        "model_state_dict": model.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "mu": data.mu,
+                        "sigma": data.sigma,
+                        "threshold": best_threshold,
+                    },
+                    save_path)
                 print(f"Saved model to: {save_path}")
         
 
 if __name__ == "__main__":
-    main()
+
+    # CLI args
+    args = parse_args()
+
+    if args.disable_logs:
+        os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
+        with TemporaryDirectory() as scratch:
+            mlflow.set_tracking_uri(Path(scratch))
+            main(args)
+    else:
+        main(args)

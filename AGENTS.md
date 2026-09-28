@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is a Python 3.12 research project for training a domain-adversarial neural network on ALC speech data. The main workflow starts in `main.py`. Model architecture lives in `model.py`, training and evaluation routines in `train.py`, dataset handling in `alc_data.py`, and experiment settings in `params.py`. `baseline.py`, `finetune.py`, and `inference.py` provide adjacent workflows. Reusable components belong in `utils/`; data preparation, profiling, and benchmarks belong in `scripts/`.
+This repository is a Python 3.12 research project for training a domain-adversarial neural network on ALC speech data. The main workflow starts in `main.py`. Model architecture lives in `model.py`, training and evaluation routines in `train.py`, dataset handling in `alc_data.py`, and experiment settings in `params.py`. `baseline.py`, `finetune.py`, and `evaluation.py` provide adjacent workflows. Reusable components belong in `utils/`; data preparation, profiling, and benchmarks belong in `scripts/`.
 
 Large or generated artifacts (`data/`, `weights/`, `mlruns/`, TensorBoard output, and `mlflow.db`) are intentionally ignored and must not be committed.
 

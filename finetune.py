@@ -66,20 +66,12 @@ def main():
 
 
     # Load in pre-trained model
-    model = DANN(p)
+    checkpoint = torch.load(os.path.join("weights", checkpoint_name), map_location="cpu")
+    model = DANN(checkpoint["params"])
     try:
-        pretrained_model = torch.load(
-            os.path.join("weights", checkpoint_name),
-            map_location="cpu",
-            weights_only=False,
-        )
-        if not isinstance(pretrained_model, DANN):
-            raise TypeError(
-                f"Expected a DANN checkpoint, got {type(pretrained_model).__name__}"
-            )
 
-        model.extractor.load_state_dict(pretrained_model.extractor.state_dict())
-        model.classifier.load_state_dict(pretrained_model.classifier.state_dict())
+        model.extractor.load_state_dict(checkpoint["model_state_dict"].extractor.state_dict())
+        model.classifier.load_state_dict(checkpoint["model_state_dict"].classifier.state_dict())
     except (FileNotFoundError, TypeError, RuntimeError) as error:
         raise RuntimeError(
             f"Could not load a compatible pretrained model from {checkpoint_name!r}"
@@ -138,9 +130,18 @@ def main():
         if save_model:
             model.to("cpu")
             run_name = mlflow.active_run().data.tags["mlflow.runName"].replace(" ", "_").replace("/", "_").replace("\\", "_")
-            save_path = os.path.join("weights",f"finetuned_dann_model-{run_name}.pth")
+            save_path = os.path.join("weights",f"finetuned_{run_name}.pth")
             os.makedirs("weights", exist_ok=True)
-            torch.save(model, save_path)
+            torch.save(
+                {
+                    "params": asdict(p),
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "mu": data.mu,
+                    "sigma": data.sigma,
+                    "threshold": best_threshold,
+                },
+                save_path)
             print(f"Saved model to: {save_path}")
 
 
