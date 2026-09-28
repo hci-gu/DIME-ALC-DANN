@@ -27,8 +27,6 @@ def main(model_name = None):
     # Load model
     checkpoint = torch.load(model_path, map_location="cpu")
     p = Params(checkpoint["params"])
-    print(type(checkpoint))
-    print(checkpoint.keys())
     model = DANN(p)
     model.load_state_dict(checkpoint["model_state_dict"])
 

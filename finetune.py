@@ -67,7 +67,8 @@ def main():
 
     # Load in pre-trained model
     checkpoint = torch.load(os.path.join("weights", checkpoint_name), map_location="cpu")
-    model = DANN(checkpoint["params"])
+    p = Params(checkpoint["params"])
+    model = DANN(p)
     try:
 
         model.extractor.load_state_dict(checkpoint["model_state_dict"].extractor.state_dict())
