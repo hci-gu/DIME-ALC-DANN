@@ -67,7 +67,7 @@ def main():
 
     # Load in pre-trained model
     checkpoint = torch.load(os.path.join("weights", checkpoint_name), map_location="cpu")
-    p = Params(checkpoint["params"])
+    p = Params(**checkpoint["params"])
     model = DANN(p)
     try:
 
