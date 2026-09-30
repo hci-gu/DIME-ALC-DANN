@@ -1,5 +1,6 @@
 import os
 import torch
+import random
 import mlflow
 import torch.nn as nn
 
@@ -34,7 +35,7 @@ def main():
 
     verbose = args.verbose
     run_name = args.run_name
-    SEED = args.seed
+    SEED = args.seed if (args.seed is not None) else random.randint(0,2**20)
     seed_everything(SEED)
 
     # Mlflow tracking
