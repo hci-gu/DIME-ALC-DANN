@@ -63,6 +63,7 @@ def main(args):
 
     # Train/Val/Test splitting
     train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.7, val_frac=0.15, test_frac=0.15)
+    data_speaker_splits = data.get_split_speakers()
     train_data = Subset(data, train_indices)
     val_data = Subset(data, val_indices)
     test_data = Subset(data, test_indices)
@@ -98,7 +99,7 @@ def main(args):
             })
 
             # Log data metadata
-            mlflow.log_dict(data.get_split_speakers(),"speaker_data_split.json")
+            mlflow.log_dict(data_speaker_splits,"speaker_data_split.json")
 
             # Perform HPO
             sampler = optuna.samplers.TPESampler(seed=SEED, n_startup_trials=N_WARMUP_TRIALS, multivariate=True)
@@ -166,7 +167,7 @@ def main(args):
             )
 
             # Log data metadata
-            mlflow.log_dict(data.get_split_speakers(),"speaker_data_split.json")
+            mlflow.log_dict(data_speaker_splits,"speaker_data_split.json")
 
             # Start training
             train(
@@ -197,6 +198,7 @@ def main(args):
                         "mu": data.mu,
                         "sigma": data.sigma,
                         "threshold": best_threshold,
+                        "speaker_splits": data_speaker_splits
                     },
                     save_path)
                 print(f"Saved model to: {save_path}")

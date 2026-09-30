@@ -74,7 +74,6 @@ def main():
     # Load in pre-trained model
     model = DANN(p)
     try:
-
         model.extractor.load_state_dict({k:v for (k,v) in checkpoint["model_state_dict"] if k.startwith("extractor")})
         model.classifier.load_state_dict({k:v for (k,v) in checkpoint["model_state_dict"] if k.startwith("classifier")})
     except (FileNotFoundError, TypeError, RuntimeError) as error:

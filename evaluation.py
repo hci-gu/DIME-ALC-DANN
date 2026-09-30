@@ -1,5 +1,6 @@
 import os
 import torch
+import mlflow
 import torch.nn as nn
 
 from model import DANN
@@ -7,8 +8,8 @@ from params import Params
 from alc_data import ALCData
 from train import test_evaluation
 from dac218_data import DAC218Data
-from torch.utils.data import DataLoader
 from utils.argument_parsing import parse_args
+from torch.utils.data import DataLoader, Subset
 
 def main(model_name = None):
 
@@ -27,7 +28,9 @@ def main(model_name = None):
     
 
     # Load model
+    device = torch.device(p.device)
     checkpoint = torch.load(model_path, map_location="cpu")
+    data_speaker_split = checkpoint["speaker_splits"]
     p = Params(**checkpoint["params"])
     model = DANN(p)
     model.load_state_dict(checkpoint["model_state_dict"])
@@ -52,6 +55,8 @@ def main(model_name = None):
         raise RuntimeError(f"Unexpected data type {args.data}")
 
     data.set_mu_sigma(checkpoint["mu"], checkpoint["sigma"]) # Use the stored mu,sigma normalization constants
+    test_data = Subset(data, indices=data_speaker_split["test_speakers"])
+    pos_weight = data.calculate_pos_weight(train_indices=data_speaker_split["train_speakers"]).to(device) if p.use_pos_weight else None
     eval_loader = DataLoader(data, p.batch_size, shuffle=False, num_workers=p.n_workers, pin_memory=p.pin_memory)
     classifier_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
@@ -62,6 +67,8 @@ def main(model_name = None):
         eval_loader=eval_loader,
         threshold=checkpoint["threshold"]
     )
+
+    mlflow.log_dict(evaluation_results)
 
 
 if __name__ == "__main__":
