@@ -21,12 +21,9 @@ def main():
     if args.checkpoint:
         checkpoint_name = args.checkpoint
     else:
-        checkpoint_name = "dann_model-unequaled-rat-371.pth"
+        checkpoint_name = "dann-618dd032.pth"
     checkpoint = torch.load(os.path.join("weights", checkpoint_name), map_location="cpu", weights_only=False)
     p = Params(**checkpoint["params"])
-
-    print(checkpoint)
-    exit(0)
 
     # User parameters
     p = Params.from_optional_overrides(**vars(args))
