@@ -1,5 +1,6 @@
 import os
 import torch
+import torch.nn as nn
 
 from model import DANN
 from params import Params
@@ -50,13 +51,16 @@ def main(model_name = None):
     else:
         raise RuntimeError(f"Unexpected data type {args.data}")
 
+    data.set_mu_sigma(checkpoint["mu"], checkpoint["sigma"]) # Use the stored mu,sigma normalization constants
     eval_loader = DataLoader(data, p.batch_size, shuffle=False, num_workers=p.n_workers, pin_memory=p.pin_memory)
+    classifier_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
     evaluation_results = test_evaluation(
         model=model,
         p=p,
-        eval_loader=eval_loader
-
+        classifier_loss_fn=classifier_loss_fn,
+        eval_loader=eval_loader,
+        threshold=checkpoint["threshold"]
     )
 
 

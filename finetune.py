@@ -17,17 +17,23 @@ def main():
     # CLI args
     args = parse_args(profile="finetune")
 
+    # Load in checkpoint
+    if args.checkpoint:
+        checkpoint_name = args.checkpoint
+    else:
+        checkpoint_name = "dann_model-unequaled-rat-371.pth"
+    checkpoint = torch.load(os.path.join("weights", checkpoint_name), map_location="cpu", weights_only=False)
+    p = Params(**checkpoint["params"])
+
+    print(checkpoint)
+    exit(0)
+
     # User parameters
-    save_model = args.save_model
     p = Params.from_optional_overrides(**vars(args))
     if args.max_samples:
         max_samples = args.max_samples
     else:
         max_samples = (1000 if p.dev_run else None)
-    if args.checkpoint:
-        checkpoint_name = args.checkpoint
-    else:
-        checkpoint_name = "dann_model-unequaled-rat-371.pth"
 
     verbose = args.verbose
     run_name = args.run_name
@@ -66,13 +72,11 @@ def main():
 
 
     # Load in pre-trained model
-    checkpoint = torch.load(os.path.join("weights", checkpoint_name), map_location="cpu")
-    p = Params(**checkpoint["params"])
     model = DANN(p)
     try:
 
-        model.extractor.load_state_dict(checkpoint["model_state_dict"].extractor.state_dict())
-        model.classifier.load_state_dict(checkpoint["model_state_dict"].classifier.state_dict())
+        model.extractor.load_state_dict({k:v for (k,v) in checkpoint["model_state_dict"] if k.startwith("extractor")})
+        model.classifier.load_state_dict({k:v for (k,v) in checkpoint["model_state_dict"] if k.startwith("classifier")})
     except (FileNotFoundError, TypeError, RuntimeError) as error:
         raise RuntimeError(
             f"Could not load a compatible pretrained model from {checkpoint_name!r}"
@@ -128,7 +132,7 @@ def main():
         mlflow.log_metrics(test_metrics)
 
         # Save finetuned model
-        if save_model:
+        if args.save_model:
             model.to("cpu")
             run_name = mlflow.active_run().data.tags["mlflow.runName"].replace(" ", "_").replace("/", "_").replace("\\", "_")
             save_path = os.path.join("weights",f"finetuned_{run_name}.pth")

@@ -29,7 +29,7 @@ def main(args):
     else:
         max_samples = (1000 if p.dev_run else None)
     run_name = args.run_name or f"dann-{uuid4().hex[:8]}"
-    SEED = args.seed if (args.seed) else random.randint(0,2**20)
+    SEED = args.seed if (args.seed is not None) else random.randint(0,2**20)
     seed_everything(SEED)
 
     # Mlflow tracking
@@ -156,8 +156,6 @@ def main(args):
             # Log data metadata
             mlflow.log_dict(
                 {
-                    "mu": data.mu,
-                    "sigma": data.sigma,
                     "n_samples": len(data),
                     "n_speakers": len(set(data.speaker_ids)),
                     "train": {"n_samples": len(train_data), "n_speakers": len(data.train_speakers_id)},
