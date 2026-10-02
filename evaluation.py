@@ -17,15 +17,14 @@ def main(model_name = None):
     # CLI args
     args = parse_args("evaluation")
 
-
     # Parse model name
-    if model_name:
-        model_path = os.path.join("weights",model_name+".pth")
+    if args.run_name is not None:
+        model_path = os.path.join("weights",args.run_name+".pth")
     else:
-        if args.run_name:
-            model_path = os.path.join("weights",args.run_name+".pth")
+        if model_name is not None:
+            model_path = os.path.join("weights",model_name+".pth")
         else:
-            raise ValueError(f"Provide either a model name ")
+            raise ValueError(f"Either provide a checkpoint via '--run-name' <checkpoint> or specify a model_name")
     
 
     # Load model
@@ -61,8 +60,12 @@ def main(model_name = None):
         i for i, speaker in enumerate(data.speaker_ids)
         if speaker in set(data_speaker_split["test_speakers"])
     ]
+    train_indices = [
+        i for i, speaker in enumerate(data.speaker_ids)
+        if speaker in set(data_speaker_split["train_speakers"])
+    ]
     test_data = Subset(data, indices=test_indices)
-    pos_weight = data.calculate_pos_weight(train_indices=data_speaker_split["train_speakers"]).to(device) if p.use_pos_weight else None
+    pos_weight = data.calculate_pos_weight(train_indices=train_indices).to(device) if p.use_pos_weight else None
     eval_loader = DataLoader(test_data, p.batch_size, shuffle=False, num_workers=p.n_workers, pin_memory=p.pin_memory)
     classifier_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
@@ -75,8 +78,9 @@ def main(model_name = None):
         threshold=checkpoint["threshold"]
     )
 
-    log_name = Path(model_name).stem
+    log_name = Path(model_name).stem / ".json"
     mlflow.log_dict(evaluation_results, log_name)
+    print(f"Saved the evaluation results to {log_name}")
 
 
 if __name__ == "__main__":
