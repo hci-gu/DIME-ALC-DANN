@@ -25,9 +25,7 @@ def main():
         checkpoint_name = "dann-618dd032.pth"
     checkpoint = torch.load(os.path.join("weights", checkpoint_name), map_location="cpu", weights_only=False)
     p = Params(**checkpoint["params"])
-
-    # User parameters
-    p = Params.from_optional_overrides(**vars(args))
+    p = p.from_optional_overrides(**vars(args))
 
     verbose = args.verbose
     run_name = args.run_name
@@ -67,8 +65,9 @@ def main():
     # Load in pre-trained model
     model = DANN(p)
     try:
-        model.extractor.load_state_dict({k:v for (k,v) in checkpoint["model_state_dict"].items() if k.startswith("extractor")})
-        model.classifier.load_state_dict({k:v for (k,v) in checkpoint["model_state_dict"].items() if k.startswith("classifier")})
+        extractor_params = {k:v for (k,v) in checkpoint["model_state_dict"].items() if k.startswith("extractor")}
+        classifier_params = {k:v for (k,v) in checkpoint["model_state_dict"].items() if k.startswith("classifier")}
+        model.load_state_dict(extractor_params | classifier_params)
     except (FileNotFoundError, TypeError, RuntimeError) as error:
         raise RuntimeError(
             f"Could not load a compatible pretrained model from {checkpoint_name!r}"
