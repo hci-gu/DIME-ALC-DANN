@@ -35,7 +35,6 @@ def main():
     # Load data
     print(f"Loading data...")
     data = ALCData(
-        max_samples=(1000 if p.dev_run else None),
         seed=SEED,
         verbose=False
     )

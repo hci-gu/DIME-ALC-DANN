@@ -1,7 +1,6 @@
 import os
 import json
 import torch
-import random
 import hashlib
 import opensmile
 import numpy as np
@@ -74,7 +73,6 @@ class ALCData(Dataset):
         self,
         data_path = None,
         transforms = None,
-        max_samples: int = None,
         lower_bac_limit: float = None, # promille
         seed: int = 1999,
         verbose: bool = False
@@ -87,7 +85,6 @@ class ALCData(Dataset):
         self.class_mapping = {"na": 0, "a": 1}
         self.transforms = transforms
         self.verbose = verbose
-        self.max_samples = max_samples
         self.lower_bac_limit = lower_bac_limit
         self.seed = seed
         self.is_split = False
@@ -128,11 +125,6 @@ class ALCData(Dataset):
             audio_label_mapping[audio_file] = label_stems[audio_stem] 
         
         matched_audio_files = list(audio_label_mapping.keys())
-        if self.max_samples:
-            generator = random.Random(self.seed)
-            selected_files = self.audio_files.copy()
-            generator.shuffle(selected_files)
-            matched_audio_files = selected_files[:self.max_samples]
 
         if self.verbose:
             print(f"Loaded in {len(matched_audio_files)} files ({len(self.audio_files)} total)")
@@ -358,7 +350,6 @@ if __name__ == "__main__":
     # print(f"Loading data...")
     # t = time()
     # data = ALCData(
-    #     max_samples=None,
     #     verbose=True,
     # )
     # data.cache()

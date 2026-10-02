@@ -52,7 +52,7 @@ def train(
         n_correct_classifier = 0.0
         n_correct_discriminator = 0.0
         for batch_idx, (x, y, metadata) in enumerate(tqdm(train_loader, desc="[Batch]", position=1, leave=False)):
-            if p.dev_run and batch_idx > 3: break # Only to validate no runtime errors, metrics should not be interpreted
+            if p.dev_run and batch_idx > 3: break # NOTE: Only to validate no runtime errors, metrics should not be interpreted
 
             t_batch_start = time()
             x = x.to(device)

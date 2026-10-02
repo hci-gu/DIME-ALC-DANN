@@ -28,10 +28,6 @@ def main():
 
     # User parameters
     p = Params.from_optional_overrides(**vars(args))
-    if args.max_samples:
-        max_samples = args.max_samples
-    else:
-        max_samples = (1000 if p.dev_run else None)
 
     verbose = args.verbose
     run_name = args.run_name
@@ -48,7 +44,6 @@ def main():
 
     # load in finetune data
     data = DAC218Data(
-        max_samples=max_samples,
         seed=SEED,
         lower_bac_limit=args.bac_limit,
         verbose=verbose
@@ -72,8 +67,8 @@ def main():
     # Load in pre-trained model
     model = DANN(p)
     try:
-        model.extractor.load_state_dict({k:v for (k,v) in checkpoint["model_state_dict"].items() if k.startwith("extractor")})
-        model.classifier.load_state_dict({k:v for (k,v) in checkpoint["model_state_dict"].items() if k.startwith("classifier")})
+        model.extractor.load_state_dict({k:v for (k,v) in checkpoint["model_state_dict"].items() if k.startswith("extractor")})
+        model.classifier.load_state_dict({k:v for (k,v) in checkpoint["model_state_dict"].items() if k.startswith("classifier")})
     except (FileNotFoundError, TypeError, RuntimeError) as error:
         raise RuntimeError(
             f"Could not load a compatible pretrained model from {checkpoint_name!r}"
@@ -99,7 +94,6 @@ def main():
         mlflow.log_params(
             {
                 "dataset": "dac",
-                "max_samples": max_samples if max_samples is not None else "all",
                 "pos_weight": pos_weight.item() if pos_weight is not None else "disabled",
                 "lower_bac_limit": args.bac_limit,
                 "source_checkpoint": checkpoint_name,

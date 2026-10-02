@@ -24,10 +24,6 @@ def main(args):
 
     # User parameters
     p = Params.from_optional_overrides(**vars(args))
-    if args.max_samples:
-        max_samples = args.max_samples
-    else:
-        max_samples = (1000 if p.dev_run else None)
     run_name = args.run_name or f"dann-{uuid4().hex[:8]}"
     SEED = args.seed if (args.seed is not None) else random.randint(0,2**20)
     seed_everything(SEED)
@@ -46,14 +42,12 @@ def main(args):
     if p.verbose: print(f"Loading data...")
     if args.data.lower() == "alc":
         data = ALCData(
-            max_samples=max_samples,
             seed=SEED,
             lower_bac_limit=args.bac_limit,
             verbose=args.verbose
         )
     elif args.data.lower() == "dac":
         data = DAC218Data(
-            max_samples=max_samples,
             seed=SEED,
             lower_bac_limit=args.bac_limit,
             verbose=args.verbose
@@ -150,7 +144,6 @@ def main(args):
                 "dataset": args.data,
                 "pos_weight": pos_weight.item() if pos_weight is not None else "disabled",
                 "lower_bac_limit": args.bac_limit,
-                "max_samples": max_samples if max_samples is not None else "all",
                 **asdict(p)
                 })
 

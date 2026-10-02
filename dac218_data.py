@@ -1,7 +1,6 @@
 import os
 import json
 import torch
-import random
 import hashlib
 import opensmile
 import numpy as np
@@ -75,7 +74,6 @@ class DAC218Data(Dataset):
         self,
         data_path = None,
         transforms = None,
-        max_samples: int = None,
         lower_bac_limit: float = None, # promille
         seed: int = 1999,
         verbose: bool = False
@@ -88,7 +86,6 @@ class DAC218Data(Dataset):
         self.class_mapping = {"na": 0, "a": 1}
         self.transforms = transforms
         self.verbose = verbose
-        self.max_samples = max_samples
         self.lower_bac_limit = lower_bac_limit
         self.seed = seed
         self.is_split = False
@@ -121,13 +118,6 @@ class DAC218Data(Dataset):
             labels = json.load(file)
         self.labels = {x["id"]: x["label"] for x in labels}
         assert all([(Path(wav_file).stem[:-8] in self.labels) for wav_file in self.audio_files]), f"Mismatch in audio label"
-
-
-        if self.max_samples:
-            generator = random.Random(self.seed)
-            selected_files = self.audio_files.copy()
-            generator.shuffle(selected_files)
-            self.audio_files = selected_files[:self.max_samples]
 
         self.files = [] # spk674-sess01a-utt0001.wav
         self.class_labels = [] # 0 (NA), 1 (A)
@@ -340,7 +330,6 @@ if __name__ == "__main__":
     # print(f"Loading data...")
     # t = time()
     # data = DAC218Data(
-    #     max_samples=200,
     #     verbose=True,
     # )
     # t_tot = time() - t

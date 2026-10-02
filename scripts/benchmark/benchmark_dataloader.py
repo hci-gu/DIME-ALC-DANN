@@ -201,7 +201,7 @@ def main() -> None:
 
     device = torch.device(p.device)
     print(f"Using device: {device}")
-    data = ALCData(max_samples=args.max_samples, seed=args.seed, verbose=True)
+    data = ALCData(seed=args.seed, verbose=True)
     train_indices, _, _ = data.speaker_split(
         train_frac=0.7,
         val_frac=0.15,
