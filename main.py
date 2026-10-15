@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader, Subset
 def main(args):
 
     # User parameters
-    p = Params.from_optional_overrides(**vars(args))
+    p = Params().from_optional_overrides(**vars(args))
     run_name = args.run_name or f"dann-{uuid4().hex[:8]}"
     SEED = args.seed if (args.seed is not None) else random.randint(0,2**20)
     seed_everything(SEED)

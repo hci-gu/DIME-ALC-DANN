@@ -1,5 +1,5 @@
 import torch
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 
 @dataclass()
 class Params():
@@ -79,15 +79,14 @@ class Params():
         self.classifier_input_dimension = self.extractor_output_dimension
         self.adversial_scheduler_n_epochs = self.n_epochs
 
-    @classmethod
-    def from_optional_overrides(cls, **overrides):
-        field_names = {f.name for f in fields(cls)}
+    def from_optional_overrides(self, **overrides):
+        field_names = {f.name for f in fields(self)}
         params_overrides = {
             name: value
             for name, value in overrides.items()
             if name in field_names and value is not None
         }
-        return cls(**params_overrides)
+        return replace(self, **params_overrides)
 
     def get_vars_from_prefix(self, prefix: str, strip_prefix: bool = True):
         output = {}
