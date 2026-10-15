@@ -5,18 +5,17 @@ import mlflow
 import torch.nn as nn
 
 from model import DANN
+from pathlib import Path
 from params import Params
 from dataclasses import asdict
 from train import train, evaluate
 from dac218_data import DAC218Data
+from tempfile import TemporaryDirectory
 from utils.argument_parsing import parse_args
 from utils.seed_control import seed_everything
 from torch.utils.data import DataLoader, Subset
 
-def main():
-
-    # CLI args
-    args = parse_args(profile="finetune")
+def main(args):
 
     # Load in checkpoint
     if args.checkpoint:
@@ -26,10 +25,12 @@ def main():
     checkpoint = torch.load(os.path.join("weights", checkpoint_name), map_location="cpu", weights_only=False)
     p = Params(**checkpoint["params"])
     p = p.from_optional_overrides(**vars(args))
+    p.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     verbose = args.verbose
     run_name = args.run_name
     SEED = args.seed if (args.seed is not None) else random.randint(0,2**20)
+    p.seed = SEED
     seed_everything(SEED)
 
     # Mlflow tracking
@@ -55,6 +56,7 @@ def main():
     p.discriminator_output_dimension = len(data.train_speakers_id) # n_speakers in train_data
     pos_weight = data.calculate_pos_weight(train_indices=train_indices).to(device) if p.use_pos_weight else None
     data.calculate_mu_sigma(train_indices)
+    speaker_splits = data.get_split_speakers()
 
     # DataLoaders
     train_loader = DataLoader(train_data, p.batch_size, shuffle=True, num_workers=p.n_workers, pin_memory=p.pin_memory)
@@ -138,16 +140,28 @@ def main():
             os.makedirs("weights", exist_ok=True)
             torch.save(
                 {
+                    "bac_limit": args.bac_limit,
                     "params": asdict(p),
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
                     "mu": data.mu,
                     "sigma": data.sigma,
                     "threshold": best_threshold,
+                    "speaker_splits": speaker_splits
                 },
                 save_path)
             print(f"Saved model to: {save_path}")
 
 
 if __name__ == "__main__":
-    main()
+
+    # CLI args
+    args = parse_args(profile="finetune")
+
+    if args.disable_logs:
+        os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
+        with TemporaryDirectory() as scratch:
+            mlflow.set_tracking_uri(Path(scratch))
+            main(args)
+    else:
+        main(args)

@@ -46,7 +46,7 @@ def parse_args(profile: ArgProfile = "main") -> argparse.Namespace:
         parser.add_argument("--run-name", type=str, default=None)
         parser.add_argument("--checkpoint", type=str, default=None)
         parser.add_argument("--save-model", action=argparse.BooleanOptionalAction, default=True)
-        parser.add_argument("--use-pos-weight", action=argparse.BooleanOptionalAction, default=True)
+        parser.add_argument("--use-pos-weight", action=argparse.BooleanOptionalAction, default=None)
         parser.add_argument("--batch-size", type=positive_int, default=None)
         parser.add_argument("--seed", type=int, default=None)
         parser.add_argument("--n-workers", "--num-workers", dest="n_workers", type=non_negative_int, default=None)

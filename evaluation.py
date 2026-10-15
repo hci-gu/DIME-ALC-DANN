@@ -31,6 +31,7 @@ def main(model_name = None):
     checkpoint = torch.load(model_path, map_location="cpu")
     data_speaker_split = checkpoint["speaker_splits"]
     p = Params(**checkpoint["params"])
+    p.device = "cuda" if torch.cuda.is_available() else "cpu"
     device = torch.device(p.device)
     model = DANN(p)
     model.to(device)

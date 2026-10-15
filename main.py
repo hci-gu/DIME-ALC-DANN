@@ -26,6 +26,7 @@ def main(args):
     p = Params().from_optional_overrides(**vars(args))
     run_name = args.run_name or f"dann-{uuid4().hex[:8]}"
     SEED = args.seed if (args.seed is not None) else random.randint(0,2**20)
+    p.seed = SEED
     seed_everything(SEED)
 
     # Mlflow tracking
@@ -82,7 +83,7 @@ def main(args):
 
             mlflow.log_params({
                 "dataset": args.data,
-                "pos_weight": pos_weight.item() if pos_weight is not None else "disabled",
+                "pos_weight": pos_weight.item() if (pos_weight is not None) else "disabled",
                 "optim_metric": p.optim_metric,
                 "lower_bac_limit": args.bac_limit,
                 "dev_run": p.dev_run,
@@ -97,7 +98,7 @@ def main(args):
 
             # Perform HPO
             sampler = optuna.samplers.TPESampler(seed=SEED, n_startup_trials=N_WARMUP_TRIALS, multivariate=True)
-            study = optuna.create_study(direction="maximize", sampler=sampler, study_name="dann_alc")
+            study = optuna.create_study(direction="maximize", sampler=sampler, study_name="dann_hpo")
             objective_fn = partial(objective, train_data=train_data, val_data=val_data, base_params=p, pos_weight=pos_weight)
             study.optimize(objective_fn, n_trials=N_TRIALS, timeout=TIMEOUT_IN_SECONDS, catch=(torch.cuda.OutOfMemoryError))
 
@@ -142,7 +143,7 @@ def main(args):
             # Log parameters
             mlflow.log_params({
                 "dataset": args.data,
-                "pos_weight": pos_weight.item() if pos_weight is not None else "disabled",
+                "pos_weight": pos_weight.item() if (pos_weight is not None) else "disabled",
                 "lower_bac_limit": args.bac_limit,
                 **asdict(p)
                 })
@@ -185,6 +186,8 @@ def main(args):
                 os.makedirs("weights", exist_ok=True)
                 torch.save(
                     {
+                        "dataset": args.data.lower(),
+                        "bac_limit": args.bac_limit,
                         "params": asdict(p),
                         "model_state_dict": model.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),

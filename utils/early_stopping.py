@@ -14,11 +14,13 @@ class EarlyStopping():
         self.best_score = None
         self.counter = 0
 
-    def load_best_model(self, model):
+    def load_best_model(self, model, optimizer=None):
         if self.best_model is None:
             raise ValueError("Tried to load mode but best_model is None")
         else:
             model.load_state_dict(self.best_model.state_dict())
+            if optimizer is not None:
+                optimizer.load_state_dict(self.best_optimizer.state_dict())
         return
 
     def reset(self):
@@ -26,20 +28,26 @@ class EarlyStopping():
         self.best_score = None
         self.counter = 0
 
-    def __call__(self, model, score):
+    def __call__(self, model, score, optimizer=None):
         """ Call with validation metric after each epoch """
 
         if self.best_score is None: # First call
             self.best_score = score
             self.best_model = copy.deepcopy(model)
+            if optimizer is not None:
+                self.best_optimizer = copy.deepcopy(optimizer)
         elif (score - self.best_score)*self.sign > self.min_delta: # Improvement
             self.best_score = score
             self.counter = 0
             self.best_model.load_state_dict(model.state_dict()) # Store new best model
+            if optimizer is not None:
+                self.best_optimizer.load_state_dict(optimizer.state_dict())
         else: # Increment counter and check termination
             self.counter += 1
             if (self.patience is not None) and (self.counter >= self.patience):
                 model.load_state_dict(self.best_model.state_dict())
+                if optimizer is not None:
+                    optimizer.load_state_dict(self.best_optimizer.state_dict())
                 return True
         return False
     

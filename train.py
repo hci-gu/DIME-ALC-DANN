@@ -116,11 +116,11 @@ def train(
         train_pbar.set_description_str(f"[Training] Train L = {train_loss:.4f}| {p.optim_metric} = {val_metrics[p.optim_metric]:.4f}")
 
         # Check early stopping
-        if stopping_criterion(model, val_metrics[p.optim_metric]):
+        if stopping_criterion(model, val_metrics[p.optim_metric], optimizer):
             break
     
 
-    stopping_criterion.load_best_model(model)
+    stopping_criterion.load_best_model(model, optimizer)
     t_tot = (time() - t_start) / 60.0
     if p.verbose: print(f"Finished training after {t_tot:.1f} minutes at epoch {1+epoch}")
     mlflow.log_metric("training_time_minutes", t_tot)
