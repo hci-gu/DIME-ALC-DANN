@@ -65,9 +65,18 @@ def main():
     # Load in pre-trained model
     model = DANN(p)
     try:
-        extractor_params = {k:v for (k,v) in checkpoint["model_state_dict"].items() if k.startswith("extractor")}
-        classifier_params = {k:v for (k,v) in checkpoint["model_state_dict"].items() if k.startswith("classifier")}
-        model.load_state_dict(extractor_params | classifier_params)
+        extractor_params = {
+            k.removeprefix("extractor.") : v for (k,v)
+            in checkpoint["model_state_dict"].items()
+            if k.startswith("extractor")
+        }
+        classifier_params = {
+            k.removeprefix("extractor.") : v for (k,v)
+            in checkpoint["model_state_dict"].items()
+            if k.startswith("classifier")
+        }
+        model.extractor.load_state_dict(extractor_params)
+        model.classifier.load_state_dict(classifier_params)
     except (FileNotFoundError, TypeError, RuntimeError) as error:
         raise RuntimeError(
             f"Could not load a compatible pretrained model from {checkpoint_name!r}"
