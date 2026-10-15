@@ -6,7 +6,7 @@ from model import DANN
 from params import Params
 
 # Load in checkpoint
-checkpoint_name = "dann-618dd032.pth"
+checkpoint_name = "dann-57893120.pth"
 checkpoint = torch.load(os.path.join("weights", checkpoint_name), map_location="cpu", weights_only=False)
 print(checkpoint["params"])
 p = Params(**checkpoint["params"])
