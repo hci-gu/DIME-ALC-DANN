@@ -233,7 +233,6 @@ def evaluate(
 def test_evaluation(
     model: nn.Module,
     p:Params,
-    classifier_loss_fn,
     eval_loader: DataLoader,
     device,
     epoch: int = None,
@@ -244,7 +243,6 @@ def test_evaluation(
     # Prepare model for eval
     model.eval()
 
-    total_classifier_loss = 0.0
     n_correct = 0
     fp, fn, tp, tn = 0, 0, 0, 0
     y_true, y_probas, bac_values = [], [], []
@@ -257,13 +255,9 @@ def test_evaluation(
         y_prob = torch.sigmoid(class_logits.squeeze(-1))
         y = y.bool()
 
-        # Loss
-        total_classifier_loss += classifier_loss_fn(class_logits.squeeze(-1), y.to(torch.float32)).item() * batch_size
-
         y_true.append(y.cpu().numpy())
         y_probas.append(y_prob.cpu().numpy())
         bac_values.append(metadata["bac"].cpu().numpy())
-    total_classifier_loss = total_classifier_loss / len(eval_loader.dataset)
     y_true = np.concatenate(y_true)
     y_probas = np.concatenate(y_probas)
     bac_values = np.concatenate(bac_values)
@@ -315,7 +309,6 @@ def test_evaluation(
     
     # Dictionary containing the metrics
     metrics =  {
-        "classifier_loss": total_classifier_loss,
         "accuracy": accuracy,
         "precision": precision,
         "recall": recall,

@@ -60,6 +60,7 @@ def parse_args(profile: ArgProfile = "main") -> argparse.Namespace:
         parser.add_argument("--bac-limit", type=non_negative_float, default=None)
         parser.add_argument("--verbose", action="store_true", default=False)
         parser.add_argument("--data", choices=["alc", "dac"], default="alc")
+        parser.add_argument("--eval-split", choices=["saved-test", "all"], default="saved-test")
     else:
         raise ValueError(f"Unknown argument parser profile: {profile}")
 

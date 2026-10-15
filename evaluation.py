@@ -40,6 +40,7 @@ def main(model_name = None):
     if args.compile:
         model = torch.compile(model)
 
+
     # Load in data
     if args.data.lower() == "alc":
         data = ALCData(
@@ -56,26 +57,32 @@ def main(model_name = None):
     else:
         raise RuntimeError(f"Unexpected data type {args.data}")
 
+    if args.eval_split == "saved-test":
+        if args.data != checkpoint["dataset"]:
+            raise ValueError(
+                "saved-test requires the training dataset; "
+                "use --eval-split all for another dataset"
+            )
+        test_indices = [
+            i for i, speaker in enumerate(data.speaker_ids)
+            if speaker in set(data_speaker_split["test_speakers"])
+        ]
+    else:
+        test_indices = list(range(len(data)))
+
+    if not test_indices:
+        raise ValueError("The selected evaluation dataset is empty")
+
     data.set_mu_sigma(checkpoint["mu"], checkpoint["sigma"]) # Use the stored mu,sigma normalization constants
-    test_indices = [
-        i for i, speaker in enumerate(data.speaker_ids)
-        if speaker in set(data_speaker_split["test_speakers"])
-    ]
-    train_indices = [
-        i for i, speaker in enumerate(data.speaker_ids)
-        if speaker in set(data_speaker_split["train_speakers"])
-    ]
     test_data = Subset(data, indices=test_indices)
-    pos_weight = data.calculate_pos_weight(train_indices=train_indices).to(device) if p.use_pos_weight else None
     eval_loader = DataLoader(test_data, p.batch_size, shuffle=False, num_workers=p.n_workers, pin_memory=p.pin_memory)
-    classifier_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
     evaluation_results = test_evaluation(
         model=model,
         p=p,
-        classifier_loss_fn=classifier_loss_fn,
         eval_loader=eval_loader,
         device=device,
+        eval_type="test",
         threshold=checkpoint["threshold"]
     )
 

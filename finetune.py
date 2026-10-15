@@ -140,6 +140,7 @@ def main(args):
             os.makedirs("weights", exist_ok=True)
             torch.save(
                 {
+                    "dataset": "dac",
                     "bac_limit": args.bac_limit,
                     "params": asdict(p),
                     "model_state_dict": model.state_dict(),
