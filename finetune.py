@@ -71,7 +71,7 @@ def main():
             if k.startswith("extractor")
         }
         classifier_params = {
-            k.removeprefix("extractor.") : v for (k,v)
+            k.removeprefix("classifier.") : v for (k,v)
             in checkpoint["model_state_dict"].items()
             if k.startswith("classifier")
         }
