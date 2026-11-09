@@ -26,10 +26,8 @@ def main(model_name = None):
         else:
             raise ValueError(f"Either provide a checkpoint via '--run-name' <checkpoint> or specify a model_name")
     
-
     # Load model
     checkpoint = torch.load(model_path, map_location="cpu")
-    data_speaker_split = checkpoint["speaker_splits"]
     p = Params(**checkpoint["params"])
     p.device = "cuda" if torch.cuda.is_available() else "cpu"
     device = torch.device(p.device)
@@ -55,6 +53,8 @@ def main(model_name = None):
             lower_bac_limit=bac_limit,
             verbose=args.verbose
         )
+    elif args.data.lower() == "gu":
+        raise NotImplementedError(f"GU data not supported yet")
     else:
         raise RuntimeError(f"Unexpected data type {args.data}")
 
@@ -64,6 +64,7 @@ def main(model_name = None):
                 "saved-test requires the training dataset; "
                 "use --eval-split all for another dataset"
             )
+        data_speaker_split = checkpoint["speaker_splits"]
         test_indices = [
             i for i, speaker in enumerate(data.speaker_ids)
             if speaker in set(data_speaker_split["test_speakers"])
@@ -87,7 +88,7 @@ def main(model_name = None):
         threshold=checkpoint["threshold"]
     )
 
-    log_name = Path(model_name).stem / ".json"
+    log_name = f"{Path(model_path).stem}.json"
     mlflow.log_dict(evaluation_results, log_name)
     print(f"Saved the evaluation results to {log_name}")
 

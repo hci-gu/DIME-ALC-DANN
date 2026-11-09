@@ -10,7 +10,7 @@ class Params():
     seed: int = 1999
 
     # Training params
-    n_epochs: int = 100
+    n_epochs: int = 50
     batch_size: int = 512
     n_workers: int = 4
     device: str = field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
