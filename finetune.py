@@ -42,11 +42,16 @@ def main(args):
     device = torch.device(p.device)
 
     # load in finetune data
-    data = DAC218Data(
-        seed=SEED,
-        lower_bac_limit=args.bac_limit,
-        verbose=verbose
-    )
+    if args.data == checkpoint["data"]:
+        raise RuntimeError(f"Finetune and base dataset are the same")
+    if args.data == "DAC":
+        data = DAC218Data(
+            seed=SEED,
+            lower_bac_limit=args.bac_limit,
+            verbose=verbose
+        )
+    else:
+        raise ValueError(f"Unexpected finetune set {args.data}")
 
     # Train/Val/Test splitting
     train_indices, val_indices, test_indices = data.speaker_split(train_frac=0.7, val_frac=0.15, test_frac=0.15)

@@ -1,5 +1,12 @@
 # Repository Guidelines
 
+## Datasets
+
+The datasets for this projects
+- ALC: The baseline dataset is the ALC dataset which is used to train a base model.
+- DAC: Will consists of 2 subsets, one used for finetuning and one for evaluation (only one subset present currently)
+- GU: internal data only used for evaluation (not added yet)
+
 ## Project Structure & Module Organization
 
 This repository is a Python 3.12 research project for training a domain-adversarial neural network on ALC and SE-DAC218 speech data. The main workflow starts in `main.py`. Model architecture lives in `model.py`, training and evaluation routines in `train.py`, dataset handling in `alc_data.py` and `dac218_data.py`, and experiment settings in `params.py`. `baseline.py`, `finetune.py`, and `evaluation.py` provide adjacent workflows. Reusable components belong in `utils/`; data preparation, profiling, and benchmarks belong in `scripts/`.
