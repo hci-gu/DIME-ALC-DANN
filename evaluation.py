@@ -42,16 +42,17 @@ def main(model_name = None):
 
 
     # Load in data
+    bac_limit = checkpoint["bac_limit"] if (args.bac_limit is None) else args.bac_limit
     if args.data.lower() == "alc":
         data = ALCData(
             seed=args.seed,
-            lower_bac_limit=args.bac_limit,
+            lower_bac_limit=bac_limit,
             verbose=args.verbose
         )
     elif args.data.lower() == "dac":
         data = DAC218Data(
             seed=args.seed,
-            lower_bac_limit=args.bac_limit,
+            lower_bac_limit=bac_limit,
             verbose=args.verbose
         )
     else:
