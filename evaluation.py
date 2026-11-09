@@ -79,17 +79,19 @@ def main(model_name = None):
     test_data = Subset(data, indices=test_indices)
     eval_loader = DataLoader(test_data, p.batch_size, shuffle=False, num_workers=p.n_workers, pin_memory=p.pin_memory)
 
-    evaluation_results = test_evaluation(
-        model=model,
-        p=p,
-        eval_loader=eval_loader,
-        device=device,
-        eval_type="test",
-        threshold=checkpoint["threshold"]
-    )
+    mlflow.set_experiment("DANN - evaluation")
+    with mlflow.start_run(run_name=f"evaluate-{Path(model_path).stem}"):
+        evaluation_results = test_evaluation(
+            model=model,
+            p=p,
+            eval_loader=eval_loader,
+            device=device,
+            eval_type="test",
+            threshold=checkpoint["threshold"]
+        )
 
-    log_name = f"{Path(model_path).stem}.json"
-    mlflow.log_dict(evaluation_results, log_name)
+        log_name = f"{Path(model_path).stem}.json"
+        mlflow.log_dict(evaluation_results, log_name)
     print(f"Saved the evaluation results to {log_name}")
 
 
