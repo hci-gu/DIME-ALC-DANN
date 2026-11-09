@@ -11,6 +11,7 @@ class EarlyStopping():
         self.sign = 1 if mode == "max" else -1
         self.min_delta = min_delta
         self.best_model = None
+        self.best_optimizer_state = None
         self.best_score = None
         self.counter = 0
 
@@ -20,11 +21,12 @@ class EarlyStopping():
         else:
             model.load_state_dict(self.best_model.state_dict())
             if optimizer is not None:
-                optimizer.load_state_dict(self.best_optimizer.state_dict())
+                optimizer.load_state_dict(copy.deepcopy(self.best_optimizer_state))
         return
 
     def reset(self):
         self.best_model = None
+        self.best_optimizer_state = None
         self.best_score = None
         self.counter = 0
 
@@ -35,19 +37,19 @@ class EarlyStopping():
             self.best_score = score
             self.best_model = copy.deepcopy(model)
             if optimizer is not None:
-                self.best_optimizer = copy.deepcopy(optimizer)
+                self.best_optimizer_state = copy.deepcopy(optimizer.state_dict())
         elif (score - self.best_score)*self.sign > self.min_delta: # Improvement
             self.best_score = score
             self.counter = 0
             self.best_model.load_state_dict(model.state_dict()) # Store new best model
             if optimizer is not None:
-                self.best_optimizer.load_state_dict(optimizer.state_dict())
+                self.best_optimizer_state = copy.deepcopy(optimizer.state_dict())
         else: # Increment counter and check termination
             self.counter += 1
             if (self.patience is not None) and (self.counter >= self.patience):
                 model.load_state_dict(self.best_model.state_dict())
                 if optimizer is not None:
-                    optimizer.load_state_dict(self.best_optimizer.state_dict())
+                    optimizer.load_state_dict(copy.deepcopy(self.best_optimizer_state))
                 return True
         return False
     

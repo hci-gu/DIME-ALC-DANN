@@ -52,6 +52,7 @@ def parse_args(profile: ArgProfile = "main") -> argparse.Namespace:
         parser.add_argument("--n-workers", "--num-workers", dest="n_workers", type=non_negative_int, default=None)
         parser.add_argument("--n-epochs", "--num-epochs", dest="n_epochs", type=positive_int, default=None)
         parser.add_argument("--bac-limit", type=non_negative_float, default=None)
+        parser.add_argument("--data", choices=["alc", "dac"], default="dac")
     elif profile == "evaluation":
         parser = argparse.ArgumentParser(description="Run evaluation for a logged DANN model")
         parser.add_argument("--run-name", type=str, default=None)

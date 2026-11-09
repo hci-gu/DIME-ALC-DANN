@@ -42,9 +42,9 @@ def main(args):
     device = torch.device(p.device)
 
     # load in finetune data
-    if args.data == checkpoint["data"]:
+    if args.data == checkpoint["dataset"]:
         raise RuntimeError(f"Finetune and base dataset are the same")
-    if args.data == "DAC":
+    if args.data == "dac":
         data = DAC218Data(
             seed=SEED,
             lower_bac_limit=args.bac_limit,
