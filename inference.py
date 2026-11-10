@@ -31,7 +31,7 @@ def positive_integer(value: str) -> int:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", type=Path, help="Path to a DANN .pth checkpoint")
-    parser.add_argument("--window-seconds", type=positive_seconds, default=10.0)
+    parser.add_argument("--window-seconds", type=positive_seconds, default=5.0)
     parser.add_argument("--input-device", help="Microphone index or name (default: system input)")
     parser.add_argument("--sample-rate", type=positive_integer, help="Default: microphone native rate")
     parser.add_argument("--list-devices", action="store_true")

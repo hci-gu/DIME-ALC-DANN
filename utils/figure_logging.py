@@ -4,7 +4,7 @@ matplotlib.use("Agg")
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import auc, roc_curve
-from matplotlib.ticker import MaxNLocator
+from matplotlib.ticker import MaxNLocator, PercentFormatter
 
 def log_evaluation_figures(
     y_true,
@@ -167,6 +167,9 @@ def log_evaluation_figures(
         _log_speaker_confident_errors(
             y_true, y_probas, speaker_ids, eval_type, epoch
         )
+        _log_speaker_confident_errors(
+            y_true, y_probas, speaker_ids, eval_type, epoch, normalize=True
+        )
 
     _log_probability_histogram(y_true, y_probas, threshold, eval_type, epoch)
     if audio_lengths is not None:
@@ -184,6 +187,7 @@ def _log_speaker_confident_errors(
     speaker_ids: np.ndarray,
     eval_type: str,
     epoch: int | None,
+    normalize: bool = False,
 ) -> None:
     # Equivalent to |p - y| > 0.9, independent of the decision threshold.
     labels = y_true.astype(bool)
@@ -198,29 +202,51 @@ def _log_speaker_confident_errors(
         np.count_nonzero(false_negatives & (speaker_ids == speaker))
         for speaker in speakers
     ])
-    totals = fp_counts + fn_counts
+    sample_counts = np.array([
+        np.count_nonzero(speaker_ids == speaker) for speaker in speakers
+    ])
+    # Both tails use all samples for the speaker as their denominator.
+    fp_values = 100.0 * fp_counts / sample_counts if normalize else fp_counts
+    fn_values = 100.0 * fn_counts / sample_counts if normalize else fn_counts
+    totals = fp_values + fn_values
 
     fig, ax = plt.subplots(figsize=(max(7, 0.4 * len(speakers)), 4.5), dpi=120)
     positions = np.arange(len(speakers))
-    ax.bar(positions, fp_counts, label="Sober: P(intoxicated) > 0.9")
+    ax.bar(positions, fp_values, label="Sober: P(intoxicated) > 0.9")
     ax.bar(
-        positions, fn_counts, bottom=fp_counts,
+        positions, fn_values, bottom=fp_values,
         label="Intoxicated: P(intoxicated) < 0.1",
     )
-    for position, count in zip(positions, totals):
-        ax.text(position, count, str(count), ha="center", va="bottom", fontsize=8)
+    for position, value in zip(positions, totals):
+        text = f"{value:.1f}%" if normalize else str(value)
+        ax.text(position, value, text, ha="center", va="bottom", fontsize=8)
+    tick_labels = [
+        f"{speaker}\nn={count}" if normalize else str(speaker)
+        for speaker, count in zip(speakers, sample_counts)
+    ]
     ax.set(
         title=f"{eval_type} confident errors by speaker (|p − y| > 0.9)",
-        xlabel="Speaker ID", ylabel="Confident error count",
-        xticks=positions, xticklabels=[str(speaker) for speaker in speakers],
-        ylim=(0.0, max(1, int(totals.max())) * 1.25),
+        xlabel="Speaker ID (n=total samples)" if normalize else "Speaker ID",
+        ylabel=(
+            "Confident errors / total speaker samples"
+            if normalize else "Confident error count"
+        ),
+        xticks=positions, xticklabels=tick_labels,
+        ylim=(0.0, max(1, float(totals.max())) * 1.25),
     )
     ax.tick_params(axis="x", labelrotation=90, labelsize=8)
-    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    if normalize:
+        ax.yaxis.set_major_formatter(PercentFormatter(xmax=100, decimals=1))
+        ax.set_yticks(np.linspace(0, min(100, max(1, float(totals.max()))), 5))
+    else:
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
     ax.legend(loc="upper left", bbox_to_anchor=(0, 1.0), fontsize=8)
     ax.set_axisbelow(True)
     ax.grid(axis="y", alpha=0.3)
-    _log_figure_with_step(fig, f"{eval_type}_speaker_confident_errors", epoch)
+    suffix = "_percentage" if normalize else ""
+    _log_figure_with_step(
+        fig, f"{eval_type}_speaker_confident_errors{suffix}", epoch
+    )
 
 
 def _log_probability_histogram(

@@ -89,3 +89,32 @@ def test_confident_errors_logged_by_test_evaluation():
     figures = {call.args[1]: call.args[0] for call in log_figure.call_args_list}
     ax = figures["images/test_speaker_confident_errors_final.png"].axes[0]
     assert [text.get_text() for text in ax.texts] == ["1", "2", "0"]
+    ax = figures["images/test_speaker_confident_errors_percentage_final.png"].axes[0]
+    assert [text.get_text() for text in ax.texts] == ["100.0%", "100.0%", "0.0%"]
+
+
+def test_confident_error_percentages_use_total_samples_per_speaker():
+    speakers = np.array([20, 10, 30, 10, 20, 10, 10])
+    labels = np.array([0, 0, 1, 1, 1, 0, 1])
+    probabilities = np.array([0.95, 0.95, 0.99, 0.05, 0.99, 0.01, 0.99])
+    with patch("utils.figure_logging.mlflow.log_figure") as log_figure:
+        _log_speaker_confident_errors(
+            labels, probabilities, speakers, "test", None, normalize=True
+        )
+
+    fig, artifact_path = log_figure.call_args.args
+    assert artifact_path == "images/test_speaker_confident_errors_percentage_final.png"
+    ax = fig.axes[0]
+    assert [tick.get_text() for tick in ax.get_xticklabels()] == [
+        "10\nn=4", "20\nn=2", "30\nn=1"
+    ]
+    np.testing.assert_allclose(
+        [bar.get_height() for bar in ax.containers[0]], [25, 50, 0]
+    )
+    np.testing.assert_allclose(
+        [bar.get_height() for bar in ax.containers[1]], [25, 0, 0]
+    )
+    np.testing.assert_allclose(
+        [bar.get_y() for bar in ax.containers[1]], [25, 50, 0]
+    )
+    assert [text.get_text() for text in ax.texts] == ["50.0%", "50.0%", "0.0%"]
