@@ -19,6 +19,7 @@ def log_evaluation_figures(
     audio_lengths: np.ndarray | None = None,
     speaker_ids: np.ndarray | None = None,
     threshold: float = 0.5,
+    bac_limit: float | None = None,
 ) -> None:
 
     # Confusion Matrix
@@ -162,6 +163,144 @@ def log_evaluation_figures(
         _log_figure_with_step(
             speaker_fig, f"{eval_type}_speaker_balanced_accuracy", epoch
         )
+
+    _log_probability_histogram(y_true, y_probas, threshold, eval_type, epoch)
+    if audio_lengths is not None:
+        _log_duration_performance(
+            y_true, y_probas >= threshold, audio_lengths, eval_type, epoch
+        )
+    _log_bac_sensitivity(
+        y_true, y_probas >= threshold, bac_values, bac_limit, eval_type, epoch
+    )
+
+
+def _log_probability_histogram(
+    y_true, y_probas, threshold: float, eval_type: str, epoch: int | None
+) -> None:
+    fig, ax = plt.subplots(figsize=(6, 4), dpi=120)
+    labels = y_true.astype(bool)
+    bins = np.linspace(0.0, 1.0, 21)
+    for mask, name in ((~labels, "Sober"), (labels, "Intoxicated")):
+        ax.hist(
+            y_probas[mask], bins=bins, alpha=0.55,
+            label=f"{name} (n={mask.sum()})",
+        )
+    ax.axvline(
+        threshold, color="black", linestyle="--",
+        label=f"Threshold={threshold:.3f}",
+    )
+    ax.set(
+        title=f"{eval_type} probabilities by true class",
+        xlabel="P(intoxicated)", ylabel="Sample count", xlim=(0.0, 1.0),
+    )
+    ax.legend()
+    ax.set_axisbelow(True)
+    ax.grid(axis="y", alpha=0.3)
+    _log_figure_with_step(fig, f"{eval_type}_probability_histogram", epoch)
+
+
+def _log_duration_performance(
+    y_true, y_pred, audio_lengths, eval_type: str, epoch: int | None
+) -> None:
+    # Fixed bins make evaluations comparable; boundary values enter the next bin.
+    bin_ids = np.digitize(audio_lengths, [2.0, 5.0, 10.0, 20.0])
+    ranges = ["[0, 2)", "[2, 5)", "[5, 10)", "[10, 20)", "[20, ∞)"]
+    labels = y_true.astype(bool)
+    scores, tick_labels = [], []
+    for index, interval in enumerate(ranges):
+        mask = bin_ids == index
+        positive = mask & labels
+        negative = mask & ~labels
+        sensitivity = y_pred[positive].mean() if positive.any() else np.nan
+        specificity = (~y_pred[negative]).mean() if negative.any() else np.nan
+        scores.append(((sensitivity + specificity) / 2, sensitivity, specificity))
+        tick_labels.append(
+            f"{interval}\nS={negative.sum()}, I={positive.sum()}"
+        )
+
+    fig, ax = plt.subplots(figsize=(9, 4.5), dpi=120)
+    positions = np.arange(len(ranges))
+    for column, name in enumerate(("Balanced accuracy", "Sensitivity", "Specificity")):
+        values = np.asarray(scores)[:, column]
+        offsets = positions + (column - 1) * 0.25
+        ax.bar(offsets, values, width=0.25, label=name)
+        for position, value in zip(offsets, values):
+            if np.isnan(value):
+                ax.text(position, 0.02, "N/A", ha="center", rotation=90, fontsize=7)
+    ax.set(
+        title=f"{eval_type} performance by audio length",
+        xlabel="Audio length (s); S=sober, I=intoxicated; N/A=missing class",
+        ylabel="Score", ylim=(0.0, 1.2),
+        xticks=positions, xticklabels=tick_labels,
+    )
+    ax.legend(loc="upper center", ncol=3, fontsize=8)
+    ax.set_axisbelow(True)
+    ax.grid(axis="y", alpha=0.3)
+    _log_figure_with_step(fig, f"{eval_type}_audio_length_performance", epoch)
+
+
+def _log_bac_sensitivity(
+    y_true, y_pred, bac_values, bac_limit: float | None,
+    eval_type: str, epoch: int | None,
+) -> None:
+    labels = y_true.astype(bool)
+    intoxicated = labels & (bac_values > 0)
+    sober = ~labels
+    fig, (ax, sober_ax) = plt.subplots(
+        1, 2, figsize=(10, 4.5), dpi=120, gridspec_kw={"width_ratios": [4, 1]}
+    )
+    if intoxicated.any():
+        max_bac = max(float(bac_values[intoxicated].max()), bac_limit or 0.0)
+        edges = np.round(np.arange(int(np.ceil(max_bac / 0.2)) + 1) * 0.2, 10)
+        # Include the cutoff as an edge so that bins cannot straddle it.
+        if bac_limit is not None and bac_limit > 0:
+            edges = np.unique(np.append(edges, bac_limit))
+        bin_ids = np.minimum(
+            np.searchsorted(edges, bac_values[intoxicated], side="right") - 1,
+            len(edges) - 2,
+        )
+        predictions = y_pred[intoxicated]
+        for index, (left, right) in enumerate(zip(edges[:-1], edges[1:])):
+            mask = bin_ids == index
+            count = int(mask.sum())
+            score = predictions[mask].mean() if count else np.nan
+            center = (left + right) / 2
+            ax.bar(center, score, width=(right - left) * 0.9, color="tab:orange")
+            ax.text(
+                center, score + 0.03 if count else 0.02,
+                f"n={count}" if count else "N/A\nn=0",
+                ha="center", va="bottom", fontsize=7, rotation=90,
+            )
+        ax.set_xlim(0.0, edges[-1])
+    else:
+        ax.text(
+            0.5, 0.5, "No intoxicated samples with positive BAC",
+            ha="center", va="center", transform=ax.transAxes,
+        )
+    if bac_limit is not None:
+        ax.axvline(
+            bac_limit, color="black", linestyle="--",
+            label=f"BAC cutoff={bac_limit:g}‰",
+        )
+        ax.legend(fontsize=8)
+    ax.set(
+        title="Intoxicated samples (0.2‰ bins; split at cutoff)",
+        xlabel="BAC (‰); final bin includes its upper edge",
+        ylabel="Sensitivity", ylim=(0.0, 1.3),
+    )
+    specificity = (~y_pred[sober]).mean() if sober.any() else np.nan
+    sober_ax.bar([0], [specificity], color="tab:blue")
+    sober_ax.set(
+        title="Sober samples", ylabel="Specificity", ylim=(0.0, 1.3),
+        xticks=[0], xticklabels=[f"Sober\nn={sober.sum()}"],
+    )
+    if not sober.any():
+        sober_ax.text(0, 0.02, "N/A", ha="center")
+    for panel in (ax, sober_ax):
+        panel.set_axisbelow(True)
+        panel.grid(axis="y", alpha=0.3)
+    fig.suptitle(f"{eval_type} detection by BAC range")
+    _log_figure_with_step(fig, f"{eval_type}_bac_sensitivity", epoch)
 
 
 def _log_figure_with_step(fig, image_key: str, epoch: int) -> None:

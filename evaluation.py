@@ -88,7 +88,8 @@ def main(model_name = None):
             eval_loader=eval_loader,
             device=device,
             eval_type="test",
-            threshold=checkpoint["threshold"]
+            threshold=checkpoint["threshold"],
+            bac_limit=bac_limit,
         )
 
         log_name = f"{Path(model_path).stem}.json"

@@ -207,6 +207,7 @@ def evaluate(
             has_both_classes=has_both_classes,
             eval_type=eval_type,
             epoch=epoch,
+            threshold=best_threshold,
         )
 
     
@@ -237,7 +238,8 @@ def test_evaluation(
     device,
     epoch: int = None,
     eval_type: Literal["val","test"] = "val",
-    threshold: float|None = None
+    threshold: float|None = None,
+    bac_limit: float | None = None,
     ) -> dict:
 
     # Prepare model for eval
@@ -313,6 +315,7 @@ def test_evaluation(
             audio_lengths=audio_lengths,
             speaker_ids=speaker_ids,
             threshold=best_threshold,
+            bac_limit=bac_limit,
         )
 
     
