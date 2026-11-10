@@ -92,6 +92,9 @@ def main(model_name = None):
         log_name = f"{Path(model_path).stem}.json"
         mlflow.log_metrics(evaluation_results)
         mlflow.log_dict(evaluation_results, log_name)
+        mlflow.log_params({
+            "bac_limit": bac_limit
+        })
     print(f"Saved the evaluation results to {log_name}")
 
 
