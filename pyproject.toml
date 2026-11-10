@@ -16,6 +16,7 @@ dependencies = [
     "praat-parselmouth>=0.4.7",
     "psutil>=7.2.2",
     "scipy>=1.18.0",
+    "sounddevice>=0.5.3",
     "tensorboard>=2.21.0",
     "torch-summary>=1.4.5",
     "torch-tb-profiler>=0.4.3",

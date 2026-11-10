@@ -16,6 +16,7 @@ def log_evaluation_figures(
     has_both_classes: bool,
     eval_type: str,
     epoch: int,
+    audio_lengths: np.ndarray | None = None,
 ) -> None:
 
     # Confusion Matrix
@@ -101,6 +102,22 @@ def log_evaluation_figures(
     )
     bac_ax.grid(alpha=0.3)
     _log_figure_with_step(bac_fig, f"{eval_type}_bac_probability", epoch)
+
+    # Audio duration versus predicted intoxication probability (all samples)
+    if audio_lengths is not None:
+        length_fig, length_ax = plt.subplots(figsize=(5, 4), dpi=120)
+        length_ax.scatter(audio_lengths, y_probas, alpha=0.65)
+        length_ax.set(
+            title=f"{eval_type} audio length versus P(intoxicated)",
+            xlabel="Audio length (s)",
+            ylabel="P(intoxicated)",
+            ylim=(-0.02, 1.02),
+        )
+        length_ax.set_xlim(left=0.0)
+        length_ax.grid(alpha=0.3)
+        _log_figure_with_step(
+            length_fig, f"{eval_type}_audio_length_probability", epoch
+        )
 
 
 def _log_figure_with_step(fig, image_key: str, epoch: int) -> None:

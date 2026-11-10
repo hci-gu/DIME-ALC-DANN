@@ -4,6 +4,7 @@ import torch
 import hashlib
 import opensmile
 import numpy as np
+import soundfile as sf
 import os.path as osp
 
 from time import time
@@ -75,7 +76,8 @@ class ALCData(Dataset):
         transforms = None,
         lower_bac_limit: float = None, # promille
         seed: int = 1999,
-        verbose: bool = False
+        verbose: bool = False,
+        include_audio_length: bool = False,
         ):
         super().__init__()
 
@@ -85,6 +87,7 @@ class ALCData(Dataset):
         self.class_mapping = {"na": 0, "a": 1}
         self.transforms = transforms
         self.verbose = verbose
+        self.include_audio_length = include_audio_length
         self.lower_bac_limit = lower_bac_limit
         self.seed = seed
         self.is_split = False
@@ -308,6 +311,10 @@ class ALCData(Dataset):
             "local_index": local_index,
             "bac": self.bac_values[index]
         }
+        if self.include_audio_length:
+            metadata["audio_length"] = float(
+                sf.info(osp.join(self.AUDIO_PATH, audio_file)).duration
+            )
 
         try:
             x = self.tensors_dict[audio_file]

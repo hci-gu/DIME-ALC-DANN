@@ -44,13 +44,15 @@ def main(model_name = None):
         data = ALCData(
             seed=args.seed,
             lower_bac_limit=bac_limit,
-            verbose=args.verbose
+            verbose=args.verbose,
+            include_audio_length=True,
         )
     elif args.data.lower() == "dac":
         data = DAC218Data(
             seed=args.seed,
             lower_bac_limit=bac_limit,
-            verbose=args.verbose
+            verbose=args.verbose,
+            include_audio_length=True,
         )
     elif args.data.lower() == "gu":
         raise NotImplementedError(f"GU data not supported yet")

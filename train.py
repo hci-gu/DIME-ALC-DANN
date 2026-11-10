@@ -245,7 +245,7 @@ def test_evaluation(
 
     n_correct = 0
     fp, fn, tp, tn = 0, 0, 0, 0
-    y_true, y_probas, bac_values = [], [], []
+    y_true, y_probas, bac_values, audio_lengths = [], [], [], []
     for (x,y,metadata) in tqdm(eval_loader, desc="[Evaluation]", position=1, leave=False):
         x: Tensor = x.to(device) # [B,d_input]
         y = y.to(device) # class label (intoxicated vs sober)
@@ -258,9 +258,12 @@ def test_evaluation(
         y_true.append(y.cpu().numpy())
         y_probas.append(y_prob.cpu().numpy())
         bac_values.append(metadata["bac"].cpu().numpy())
+        if "audio_length" in metadata:
+            audio_lengths.append(metadata["audio_length"].cpu().numpy())
     y_true = np.concatenate(y_true)
     y_probas = np.concatenate(y_probas)
     bac_values = np.concatenate(bac_values)
+    audio_lengths = np.concatenate(audio_lengths) if audio_lengths else None
 
     # Precision-Recall Curve & optimal threshold
     pr_precision, pr_recall, pr_thresholds = precision_recall_curve(y_true, y_probas)
@@ -304,6 +307,7 @@ def test_evaluation(
             has_both_classes=has_both_classes,
             eval_type=eval_type,
             epoch=epoch,
+            audio_lengths=audio_lengths,
         )
 
     
