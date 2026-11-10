@@ -4,6 +4,7 @@ matplotlib.use("Agg")
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import auc, roc_curve
+from matplotlib.ticker import MaxNLocator
 
 def log_evaluation_figures(
     y_true,
@@ -163,6 +164,9 @@ def log_evaluation_figures(
         _log_figure_with_step(
             speaker_fig, f"{eval_type}_speaker_balanced_accuracy", epoch
         )
+        _log_speaker_confident_errors(
+            y_true, y_probas, speaker_ids, eval_type, epoch
+        )
 
     _log_probability_histogram(y_true, y_probas, threshold, eval_type, epoch)
     if audio_lengths is not None:
@@ -172,6 +176,51 @@ def log_evaluation_figures(
     _log_bac_sensitivity(
         y_true, y_probas >= threshold, bac_values, bac_limit, eval_type, epoch
     )
+
+
+def _log_speaker_confident_errors(
+    y_true: np.ndarray,
+    y_probas: np.ndarray,
+    speaker_ids: np.ndarray,
+    eval_type: str,
+    epoch: int | None,
+) -> None:
+    # Equivalent to |p - y| > 0.9, independent of the decision threshold.
+    labels = y_true.astype(bool)
+    false_positives = ~labels & (y_probas > 0.9)
+    false_negatives = labels & (y_probas < 0.1)
+    speakers = np.unique(speaker_ids)
+    fp_counts = np.array([
+        np.count_nonzero(false_positives & (speaker_ids == speaker))
+        for speaker in speakers
+    ])
+    fn_counts = np.array([
+        np.count_nonzero(false_negatives & (speaker_ids == speaker))
+        for speaker in speakers
+    ])
+    totals = fp_counts + fn_counts
+
+    fig, ax = plt.subplots(figsize=(max(7, 0.4 * len(speakers)), 4.5), dpi=120)
+    positions = np.arange(len(speakers))
+    ax.bar(positions, fp_counts, label="Sober: P(intoxicated) > 0.9")
+    ax.bar(
+        positions, fn_counts, bottom=fp_counts,
+        label="Intoxicated: P(intoxicated) < 0.1",
+    )
+    for position, count in zip(positions, totals):
+        ax.text(position, count, str(count), ha="center", va="bottom", fontsize=8)
+    ax.set(
+        title=f"{eval_type} confident errors by speaker (|p − y| > 0.9)",
+        xlabel="Speaker ID", ylabel="Confident error count",
+        xticks=positions, xticklabels=[str(speaker) for speaker in speakers],
+        ylim=(0.0, max(1, int(totals.max())) * 1.25),
+    )
+    ax.tick_params(axis="x", labelrotation=90, labelsize=8)
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.legend(loc="upper left", bbox_to_anchor=(0, 1.0), fontsize=8)
+    ax.set_axisbelow(True)
+    ax.grid(axis="y", alpha=0.3)
+    _log_figure_with_step(fig, f"{eval_type}_speaker_confident_errors", epoch)
 
 
 def _log_probability_histogram(
