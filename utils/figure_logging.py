@@ -17,6 +17,8 @@ def log_evaluation_figures(
     eval_type: str,
     epoch: int,
     audio_lengths: np.ndarray | None = None,
+    speaker_ids: np.ndarray | None = None,
+    threshold: float = 0.5,
 ) -> None:
 
     # Confusion Matrix
@@ -117,6 +119,48 @@ def log_evaluation_figures(
         length_ax.grid(alpha=0.3)
         _log_figure_with_step(
             length_fig, f"{eval_type}_audio_length_probability", epoch
+        )
+
+    # Balanced accuracy for each speaker using the evaluation threshold.
+    if speaker_ids is not None:
+        speakers = np.unique(speaker_ids)
+        y_pred = y_probas >= threshold
+        scores = []
+        for speaker in speakers:
+            mask = speaker_ids == speaker
+            labels = y_true[mask].astype(bool)
+            predictions = y_pred[mask]
+            if not labels.any() or labels.all():
+                scores.append(np.nan)
+                continue
+            sensitivity = predictions[labels].mean()
+            specificity = (~predictions[~labels]).mean()
+            scores.append((sensitivity + specificity) / 2)
+
+        speaker_fig, speaker_ax = plt.subplots(
+            figsize=(max(6, 0.35 * len(speakers)), 4), dpi=120
+        )
+        positions = np.arange(len(speakers))
+        speaker_ax.bar(positions, scores)
+        for position, score in zip(positions, scores):
+            if np.isnan(score):
+                speaker_ax.text(
+                    position, 0.02, "N/A", ha="center", va="bottom",
+                    rotation=90, fontsize=8,
+                )
+        speaker_ax.set(
+            title=f"{eval_type} balanced accuracy by speaker",
+            xlabel="Speaker ID (N/A: only one class present)",
+            ylabel="Balanced accuracy",
+            xticks=positions,
+            xticklabels=[str(speaker) for speaker in speakers],
+            ylim=(0.0, 1.05),
+        )
+        speaker_ax.tick_params(axis="x", labelrotation=90, labelsize=8)
+        speaker_ax.set_axisbelow(True)
+        speaker_ax.grid(axis="y", alpha=0.3)
+        _log_figure_with_step(
+            speaker_fig, f"{eval_type}_speaker_balanced_accuracy", epoch
         )
 
 
