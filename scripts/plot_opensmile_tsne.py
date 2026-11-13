@@ -57,7 +57,7 @@ def main() -> None:
 
     print(f"ALC: {len(alc)} samples; DAC: {len(dac)} samples; features: {features.shape[1]}")
     features = StandardScaler().fit_transform(features)
-    n_components = min(50, features.shape[0] - 1, features.shape[1])
+    n_components = min(100, features.shape[0] - 1, features.shape[1])
     features = PCA(n_components=n_components, random_state=args.seed).fit_transform(features)
     embedding = TSNE(n_components=2, perplexity=args.perplexity, random_state=args.seed,
                      init="random").fit_transform(features)
