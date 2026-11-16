@@ -170,6 +170,9 @@ def log_evaluation_figures(
         _log_speaker_confident_errors(
             y_true, y_probas, speaker_ids, eval_type, epoch, normalize=True
         )
+        _log_speaker_confident_errors_by_bac(
+            y_true, y_probas, speaker_ids, bac_values, eval_type, epoch
+        )
 
     _log_probability_histogram(y_true, y_probas, threshold, eval_type, epoch)
     if audio_lengths is not None:
@@ -246,6 +249,57 @@ def _log_speaker_confident_errors(
     suffix = "_percentage" if normalize else ""
     _log_figure_with_step(
         fig, f"{eval_type}_speaker_confident_errors{suffix}", epoch
+    )
+
+
+def _log_speaker_confident_errors_by_bac(
+    y_true: np.ndarray,
+    y_probas: np.ndarray,
+    speaker_ids: np.ndarray,
+    bac_values: np.ndarray,
+    eval_type: str,
+    epoch: int | None,
+) -> None:
+    # Restrict the numerator, denominator, and mean BAC to true intoxicated samples.
+    intoxicated = y_true.astype(bool)
+    speakers = np.unique(speaker_ids[intoxicated])
+    mean_bac, percentages, counts, error_counts = [], [], [], []
+    for speaker in speakers:
+        mask = intoxicated & (speaker_ids == speaker)
+        count = int(mask.sum())
+        errors = int(np.count_nonzero(y_probas[mask] < 0.1))
+        mean_bac.append(float(bac_values[mask].mean()))
+        percentages.append(100.0 * errors / count)
+        counts.append(count)
+        error_counts.append(errors)
+
+    fig, ax = plt.subplots(figsize=(8, 5), dpi=120)
+    if len(speakers):
+        ax.scatter(mean_bac, percentages, alpha=0.75)
+        for speaker, bac, percentage, count, errors in zip(
+            speakers, mean_bac, percentages, counts, error_counts
+        ):
+            ax.annotate(
+                f"{speaker} ({errors}/{count})", (bac, percentage),
+                xytext=(4, 5), textcoords="offset points", fontsize=8,
+            )
+    else:
+        ax.text(
+            0.5, 0.5, "No intoxicated samples", ha="center", va="center",
+            transform=ax.transAxes,
+        )
+    ax.set(
+        title=f"{eval_type} confident errors versus BAC by speaker\n"
+              "Intoxicated samples only; labels: speaker (errors/total)",
+        xlabel="Mean BAC of speaker's intoxicated samples (‰)",
+        ylabel="Confident errors / speaker's intoxicated samples",
+        ylim=(-3.0, 110.0), yticks=np.arange(0, 101, 20),
+    )
+    ax.set_xlim(left=0.0)
+    ax.yaxis.set_major_formatter(PercentFormatter(xmax=100))
+    ax.grid(alpha=0.3)
+    _log_figure_with_step(
+        fig, f"{eval_type}_speaker_intoxicated_confident_errors_bac", epoch
     )
 
 

@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 from params import Params
 from train import test_evaluation as run_test_evaluation
 from utils.figure_logging import _log_speaker_confident_errors
+from utils.figure_logging import _log_speaker_confident_errors_by_bac
 
 
 def test_speaker_balanced_accuracy_uses_shared_threshold():
@@ -91,6 +92,11 @@ def test_confident_errors_logged_by_test_evaluation():
     assert [text.get_text() for text in ax.texts] == ["1", "2", "0"]
     ax = figures["images/test_speaker_confident_errors_percentage_final.png"].axes[0]
     assert [text.get_text() for text in ax.texts] == ["100.0%", "100.0%", "0.0%"]
+    ax = figures[
+        "images/test_speaker_intoxicated_confident_errors_bac_final.png"
+    ].axes[0]
+    np.testing.assert_allclose(ax.collections[0].get_offsets(), [[0.8, 100.0]])
+    assert [text.get_text() for text in ax.texts] == ["10 (1/1)"]
 
 
 def test_confident_error_percentages_use_total_samples_per_speaker():
@@ -118,3 +124,40 @@ def test_confident_error_percentages_use_total_samples_per_speaker():
         [bar.get_y() for bar in ax.containers[1]], [25, 50, 0]
     )
     assert [text.get_text() for text in ax.texts] == ["50.0%", "50.0%", "0.0%"]
+
+
+def test_speaker_bac_confident_errors_exclude_sober_samples():
+    speakers = np.array([20, 10, 30, 10, 20, 10, 40, 40, 40])
+    labels = np.array([1, 1, 0, 0, 1, 1, 1, 0, 1])
+    probabilities = np.array([0.9, 0.05, 0.99, 0.99, 0.5, 0.1, 0.0, 0.95, 0.05])
+    bac = np.array([1.0, 0.6, 0.0, 0.0, 1.4, 1.0, 0.8, 0.0, 0.8])
+    with patch("utils.figure_logging.mlflow.log_figure") as log_figure:
+        _log_speaker_confident_errors_by_bac(
+            labels, probabilities, speakers, bac, "test", None
+        )
+
+    fig, artifact_path = log_figure.call_args.args
+    assert artifact_path == (
+        "images/test_speaker_intoxicated_confident_errors_bac_final.png"
+    )
+    ax = fig.axes[0]
+    # BAC includes all intoxicated samples, and p=0.1 is not a confident error.
+    np.testing.assert_allclose(
+        ax.collections[0].get_offsets(), [[0.8, 50], [1.2, 0], [0.8, 100]]
+    )
+    assert [text.get_text() for text in ax.texts] == [
+        "10 (1/2)", "20 (0/2)", "40 (2/2)"
+    ]
+
+
+def test_speaker_bac_confident_errors_handle_no_intoxicated_samples():
+    with patch("utils.figure_logging.mlflow.log_figure") as log_figure:
+        _log_speaker_confident_errors_by_bac(
+            np.array([0, 0]), np.array([0.95, 0.01]), np.array([10, 20]),
+            np.array([0.0, 0.0]), "test", None,
+        )
+
+    fig, _ = log_figure.call_args.args
+    ax = fig.axes[0]
+    assert not ax.collections
+    assert ax.texts[0].get_text() == "No intoxicated samples"
