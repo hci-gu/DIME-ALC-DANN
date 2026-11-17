@@ -1,14 +1,16 @@
-"""Visualize cached ALC and DAC OpenSMILE features with t-SNE."""
+"""Visualize ALC, DAC, and filtered GU OpenSMILE features with t-SNE."""
 
 import argparse
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import opensmile
 import torch
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
+from tqdm import tqdm
 
 
 def load_features(path: Path, max_samples: int | None, seed: int) -> np.ndarray:
@@ -32,10 +34,40 @@ def load_features(path: Path, max_samples: int | None, seed: int) -> np.ndarray:
     return features
 
 
+def load_gu_features(root: Path, max_samples: int | None, seed: int) -> np.ndarray:
+    """Extract OpenSMILE features from the two filtered GU WAV directories."""
+    files = []
+    for folder in ("filtered-control", "filtered-intoxicated"):
+        directory = root / folder
+        if not directory.is_dir():
+            raise FileNotFoundError(f"GU directory not found: {directory}")
+        wav_files = sorted(path for path in directory.iterdir()
+                           if path.is_file() and path.suffix.lower() == ".wav")
+        if not wav_files:
+            raise ValueError(f"No WAV files found in {directory}")
+        files.extend(wav_files)
+    if max_samples is not None and len(files) > max_samples:
+        indices = np.random.default_rng(seed).choice(len(files), max_samples, replace=False)
+        files = [files[index] for index in sorted(indices)]
+
+    processor = opensmile.Smile(
+        feature_set=opensmile.FeatureSet.ComParE_2016,
+        feature_level=opensmile.FeatureLevel.Functionals,
+    )
+    features = np.stack([
+        processor.process_file(str(path)).to_numpy().squeeze(0)
+        for path in tqdm(files, desc="Extracting GU features")
+    ]).astype(np.float32)
+    if features.ndim != 2 or not np.isfinite(features).all():
+        raise ValueError("Expected finite GU feature vectors")
+    return features
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--alc-cache", type=Path, default=Path(".cache/alc-opensmile-features.pt"))
     parser.add_argument("--dac-cache", type=Path, default=Path(".cache/dac-opensmile-features.pt"))
+    parser.add_argument("--gu-dir", type=Path, default=Path("data/GU"), help="GU dataset root")
     parser.add_argument("--max-samples", type=int, help="Maximum samples per dataset (default: all)")
     parser.add_argument("--perplexity", type=float, default=30, help="t-SNE perplexity (default: 30)")
     parser.add_argument("--seed", type=int, default=1999)
@@ -49,13 +81,15 @@ def main() -> None:
 
     alc = load_features(args.alc_cache, args.max_samples, args.seed)
     dac = load_features(args.dac_cache, args.max_samples, args.seed)
-    if alc.shape[1] != dac.shape[1]:
-        raise ValueError("ALC and DAC caches have different feature dimensions")
-    features = np.concatenate((alc, dac))
+    gu = load_gu_features(args.gu_dir, args.max_samples, args.seed)
+    if len({alc.shape[1], dac.shape[1], gu.shape[1]}) != 1:
+        raise ValueError("ALC, DAC, and GU have different feature dimensions")
+    features = np.concatenate((alc, dac, gu))
     if args.perplexity >= len(features):
         parser.error("--perplexity must be smaller than the total number of samples")
 
-    print(f"ALC: {len(alc)} samples; DAC: {len(dac)} samples; features: {features.shape[1]}")
+    print(f"ALC: {len(alc)} samples; DAC: {len(dac)} samples; GU: {len(gu)} samples; "
+          f"features: {features.shape[1]}")
     features = StandardScaler().fit_transform(features)
     n_components = min(100, features.shape[0] - 1, features.shape[1])
     features = PCA(n_components=n_components, random_state=args.seed).fit_transform(features)
@@ -64,8 +98,11 @@ def main() -> None:
 
     fig, ax = plt.subplots()
     ax.scatter(embedding[:len(alc), 0], embedding[:len(alc), 1], s=8, alpha=0.5, label="ALC")
-    ax.scatter(embedding[len(alc):, 0], embedding[len(alc):, 1], s=8, alpha=0.5, label="DAC")
-    ax.set(xlabel="t-SNE 1", ylabel="t-SNE 2", title="OpenSMILE features: ALC and DAC")
+    ax.scatter(embedding[len(alc):len(alc) + len(dac), 0],
+               embedding[len(alc):len(alc) + len(dac), 1], s=8, alpha=0.5, label="DAC")
+    ax.scatter(embedding[len(alc) + len(dac):, 0],
+               embedding[len(alc) + len(dac):, 1], s=8, alpha=0.5, label="GU")
+    ax.set(xlabel="t-SNE 1", ylabel="t-SNE 2", title="OpenSMILE features: ALC, DAC and GU")
     ax.legend(markerscale=2)
     fig.tight_layout()
     if args.output:
