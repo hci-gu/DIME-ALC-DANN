@@ -7,6 +7,8 @@ import torch.nn as nn
 from model import DANN
 from pathlib import Path
 from params import Params
+from alc_data import ALCData
+from gu_data import GUData
 from dataclasses import asdict
 from train import train, evaluate
 from dac218_data import DAC218Data
@@ -42,14 +44,21 @@ def main(args):
     device = torch.device(p.device)
 
     # load in finetune data
+    bac_limit = None if args.data == "gu" else args.bac_limit
+    if args.data == "gu" and args.bac_limit is not None:
+        print("GU has no measured BAC values; --bac-limit is ignored.")
     if args.data == checkpoint["dataset"]:
         raise RuntimeError(f"Finetune and base dataset are the same")
     if args.data == "dac":
         data = DAC218Data(
             seed=SEED,
-            lower_bac_limit=args.bac_limit,
+            lower_bac_limit=bac_limit,
             verbose=verbose
         )
+    elif args.data == "alc":
+        data = ALCData(seed=SEED, lower_bac_limit=bac_limit, verbose=verbose)
+    elif args.data == "gu":
+        data = GUData(seed=SEED, verbose=verbose)
     else:
         raise ValueError(f"Unexpected finetune set {args.data}")
 
@@ -108,9 +117,9 @@ def main(args):
         # Log parameters
         mlflow.log_params(
             {
-                "dataset": "dac",
+                "dataset": args.data,
                 "pos_weight": pos_weight.item() if pos_weight is not None else "disabled",
-                "lower_bac_limit": args.bac_limit,
+                "lower_bac_limit": bac_limit,
                 "source_checkpoint": checkpoint_name,
                 "finetune_extractor_lr": optimizer.param_groups[0]["lr"],
                 "finetune_classifier_lr": optimizer.param_groups[1]["lr"],
@@ -145,8 +154,8 @@ def main(args):
             os.makedirs("weights", exist_ok=True)
             torch.save(
                 {
-                    "dataset": "dac",
-                    "bac_limit": args.bac_limit,
+                    "dataset": args.data,
+                    "bac_limit": bac_limit,
                     "params": asdict(p),
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),

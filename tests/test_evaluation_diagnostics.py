@@ -94,3 +94,25 @@ def test_diagnostics_handle_single_class_and_constant_duration(label):
     else:
         assert "No intoxicated samples" in bac_ax.texts[0].get_text()
     assert not plt.get_fignums()
+
+
+def test_bac_plots_exclude_unknown_measurements():
+    dataset = [
+        (torch.tensor([logit]), label, {"speaker_id": speaker, "bac": bac})
+        for logit, label, speaker, bac in [
+            (-2.0, 0, 1, 0.0), (2.0, 1, 2, 0.4),
+            (-2.0, 1, 2, float("nan")), (2.0, 0, 3, float("nan")),
+        ]
+    ]
+    captured = {}
+    with patch("utils.figure_logging.mlflow.log_figure", side_effect=lambda fig, path: captured.update({path: fig})):
+        metrics = run_test_evaluation(
+            torch.nn.Identity(), Params(), DataLoader(dataset, batch_size=4),
+            torch.device("cpu"), eval_type="test", threshold=0.5,
+        )
+    assert metrics["test/accuracy"] == 0.5  # All samples still contribute.
+    bac_ax = captured["images/test_bac_probability_final.png"].axes[0]
+    np.testing.assert_allclose(bac_ax.collections[0].get_offsets(), [[0.4, torch.sigmoid(torch.tensor(2.0)).item()]])
+    speaker_ax = captured["images/test_speaker_intoxicated_confident_errors_bac_final.png"].axes[0]
+    np.testing.assert_allclose(speaker_ax.collections[0].get_offsets(), [[0.4, 0.0]])
+    assert not plt.get_fignums()

@@ -12,6 +12,28 @@ For CUDA/GPU compatible devices (recommended)
 uv sync --extra cuda
 ```
 
+## GU dataset
+
+Place filtered WAV files in `data/GU/filtered-control` and
+`data/GU/filtered-intoxicated`, then create the feature cache once:
+
+``` bash
+uv run python gu_data.py
+uv run python main.py --data gu
+uv run python finetune.py --data gu --checkpoint my-base-model
+uv run python evaluation.py --data gu --run-name my-model --eval-split all
+```
+
+Training and finetuning split speakers within each cohort so all three splits
+contain both classes. Each cohort needs at least three speakers. Finetuning
+expects a checkpoint trained on a different dataset. To evaluate the held-out
+speakers of a GU checkpoint, use `--eval-split saved-test` instead of `all`.
+
+GU has no measured BAC values: `--bac-limit` is ignored and BAC plots are skipped.
+Classification metrics, probability plots, audio-duration diagnostics, and
+speaker error plots remain available. Per-speaker balanced accuracy is N/A
+because individual GU speakers have only one class.
+
 ## Microphone inference
 
 Use a DANN checkpoint saved by training or finetuning (including its normalization statistics):

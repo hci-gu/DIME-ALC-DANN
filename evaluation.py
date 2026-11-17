@@ -6,6 +6,7 @@ from model import DANN
 from pathlib import Path
 from params import Params
 from alc_data import ALCData
+from gu_data import GUData
 from train import test_evaluation
 from dac218_data import DAC218Data
 from utils.argument_parsing import parse_args
@@ -40,6 +41,10 @@ def main(model_name = None):
 
     # Load in data
     bac_limit = checkpoint["bac_limit"] if (args.bac_limit is None) else args.bac_limit
+    if args.data.lower() == "gu":
+        bac_limit = None
+        if args.bac_limit is not None:
+            print("GU has no measured BAC values; --bac-limit is ignored.")
     if args.data.lower() == "alc":
         data = ALCData(
             seed=args.seed,
@@ -55,7 +60,11 @@ def main(model_name = None):
             include_audio_length=True,
         )
     elif args.data.lower() == "gu":
-        raise NotImplementedError(f"GU data not supported yet")
+        data = GUData(
+            seed=args.seed,
+            verbose=args.verbose,
+            include_audio_length=True,
+        )
     else:
         raise RuntimeError(f"Unexpected data type {args.data}")
 

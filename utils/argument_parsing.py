@@ -37,7 +37,7 @@ def parse_args(profile: ArgProfile = "main") -> argparse.Namespace:
         parser.add_argument("--n-workers", "--num-workers", dest="n_workers", type=non_negative_int, default=None)
         parser.add_argument("--n-epochs", "--num-epochs", dest="n_epochs", type=positive_int, default=None)
         parser.add_argument("--bac-limit", type=non_negative_float, default=None)
-        parser.add_argument("--data", choices=["alc", "dac"], default="alc")
+        parser.add_argument("--data", choices=["alc", "dac","gu"], default="alc")
     elif profile == "finetune":
         parser = argparse.ArgumentParser(description="DANN trainer")
         parser.add_argument("--dev-run", action="store_true", default=None)
@@ -52,7 +52,7 @@ def parse_args(profile: ArgProfile = "main") -> argparse.Namespace:
         parser.add_argument("--n-workers", "--num-workers", dest="n_workers", type=non_negative_int, default=None)
         parser.add_argument("--n-epochs", "--num-epochs", dest="n_epochs", type=positive_int, default=None)
         parser.add_argument("--bac-limit", type=non_negative_float, default=None)
-        parser.add_argument("--data", choices=["alc", "dac"], default="dac")
+        parser.add_argument("--data", choices=["alc", "dac","gu"], default="dac")
     elif profile == "evaluation":
         parser = argparse.ArgumentParser(description="Run evaluation for a logged DANN model")
         parser.add_argument("--run-name", type=str, default=None)
@@ -60,7 +60,7 @@ def parse_args(profile: ArgProfile = "main") -> argparse.Namespace:
         parser.add_argument("--seed", type=int, default=None)
         parser.add_argument("--bac-limit", type=non_negative_float, default=None)
         parser.add_argument("--verbose", action="store_true", default=False)
-        parser.add_argument("--data", choices=["alc", "dac"], default="alc")
+        parser.add_argument("--data", choices=["alc", "dac","gu"], default="alc")
         parser.add_argument("--eval-split", choices=["saved-test", "all"], default="saved-test")
     else:
         raise ValueError(f"Unknown argument parser profile: {profile}")

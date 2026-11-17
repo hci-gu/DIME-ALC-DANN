@@ -10,6 +10,7 @@ from model import DANN
 from pathlib import Path
 from params import Params
 from alc_data import ALCData
+from gu_data import GUData
 from functools import partial
 from dataclasses import asdict
 from dac218_data import DAC218Data
@@ -40,19 +41,24 @@ def main(args):
     device = torch.device(p.device)
 
     # Load data
+    bac_limit = None if args.data.lower() == "gu" else args.bac_limit
+    if args.data.lower() == "gu" and args.bac_limit is not None:
+        print("GU has no measured BAC values; --bac-limit is ignored.")
     if p.verbose: print(f"Loading data...")
     if args.data.lower() == "alc":
         data = ALCData(
             seed=SEED,
-            lower_bac_limit=args.bac_limit,
+            lower_bac_limit=bac_limit,
             verbose=args.verbose
         )
     elif args.data.lower() == "dac":
         data = DAC218Data(
             seed=SEED,
-            lower_bac_limit=args.bac_limit,
+            lower_bac_limit=bac_limit,
             verbose=args.verbose
         )
+    elif args.data.lower() == "gu":
+        data = GUData(seed=SEED, verbose=args.verbose)
     else:
         raise RuntimeError(f"Unexpected data type {args.data}")
 
@@ -85,7 +91,7 @@ def main(args):
                 "dataset": args.data,
                 "pos_weight": pos_weight.item() if (pos_weight is not None) else "disabled",
                 "optim_metric": p.optim_metric,
-                "lower_bac_limit": args.bac_limit,
+                "lower_bac_limit": bac_limit,
                 "dev_run": p.dev_run,
                 "n_trials": N_TRIALS,
                 "n_warmup_trials": N_WARMUP_TRIALS,
@@ -144,7 +150,7 @@ def main(args):
             mlflow.log_params({
                 "dataset": args.data,
                 "pos_weight": pos_weight.item() if (pos_weight is not None) else "disabled",
-                "lower_bac_limit": args.bac_limit,
+                "lower_bac_limit": bac_limit,
                 **asdict(p)
                 })
 
@@ -187,7 +193,7 @@ def main(args):
                 torch.save(
                     {
                         "dataset": args.data.lower(),
-                        "bac_limit": args.bac_limit,
+                        "bac_limit": bac_limit,
                         "params": asdict(p),
                         "model_state_dict": model.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),

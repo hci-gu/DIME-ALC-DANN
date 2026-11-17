@@ -77,35 +77,12 @@ def log_evaluation_figures(
     roc_ax.grid(alpha=0.3)
     _log_figure_with_step(roc_fig, f"{eval_type}_roc_curve", epoch)
 
-    # BAC versus predicted intoxication probability
-    intoxicated_mask = bac_values != 0
-    bac_fig, bac_ax = plt.subplots(figsize=(5, 4), dpi=120)
-    if intoxicated_mask.any():
-        max_bac = float(bac_values[intoxicated_mask].max())
-        bac_ax.scatter(
-            bac_values[intoxicated_mask],
-            y_probas[intoxicated_mask],
-            alpha=0.65,
+    # Unknown BAC (for example GU) must not enter BAC plots or their denominators.
+    known_bac = np.isfinite(bac_values)
+    if known_bac.any():
+        _log_bac_probability(
+            y_probas[known_bac], bac_values[known_bac], eval_type, epoch
         )
-    else:
-        max_bac = 1.0
-        bac_ax.text(
-            0.5,
-            0.5,
-            "No intoxicated samples",
-            ha="center",
-            va="center",
-            transform=bac_ax.transAxes,
-        )
-    bac_ax.set(
-        title=f"{eval_type} BAC versus P(drunk)",
-        xlabel="BAC (‰)",
-        ylabel="P(drunk)",
-        xlim=(0.0, 1.1 * max_bac),
-        ylim=(-0.02, 1.02),
-    )
-    bac_ax.grid(alpha=0.3)
-    _log_figure_with_step(bac_fig, f"{eval_type}_bac_probability", epoch)
 
     # Audio duration versus predicted intoxication probability (all samples)
     if audio_lengths is not None:
@@ -170,18 +147,52 @@ def log_evaluation_figures(
         _log_speaker_confident_errors(
             y_true, y_probas, speaker_ids, eval_type, epoch, normalize=True
         )
-        _log_speaker_confident_errors_by_bac(
-            y_true, y_probas, speaker_ids, bac_values, eval_type, epoch
-        )
+        if known_bac.any():
+            _log_speaker_confident_errors_by_bac(
+                y_true[known_bac], y_probas[known_bac], speaker_ids[known_bac],
+                bac_values[known_bac], eval_type, epoch
+            )
 
     _log_probability_histogram(y_true, y_probas, threshold, eval_type, epoch)
     if audio_lengths is not None:
         _log_duration_performance(
             y_true, y_probas >= threshold, audio_lengths, eval_type, epoch
         )
-    _log_bac_sensitivity(
-        y_true, y_probas >= threshold, bac_values, bac_limit, eval_type, epoch
+    if known_bac.any():
+        _log_bac_sensitivity(
+            y_true[known_bac], y_probas[known_bac] >= threshold,
+            bac_values[known_bac], bac_limit, eval_type, epoch
+        )
+
+
+def _log_bac_probability(
+    y_probas: np.ndarray,
+    bac_values: np.ndarray,
+    eval_type: str,
+    epoch: int | None,
+) -> None:
+    intoxicated_mask = bac_values != 0
+    bac_fig, bac_ax = plt.subplots(figsize=(5, 4), dpi=120)
+    if intoxicated_mask.any():
+        max_bac = float(bac_values[intoxicated_mask].max())
+        bac_ax.scatter(
+            bac_values[intoxicated_mask], y_probas[intoxicated_mask], alpha=0.65
+        )
+    else:
+        max_bac = 1.0
+        bac_ax.text(
+            0.5, 0.5, "No intoxicated samples", ha="center", va="center",
+            transform=bac_ax.transAxes,
+        )
+    bac_ax.set(
+        title=f"{eval_type} BAC versus P(drunk)",
+        xlabel="BAC (‰)",
+        ylabel="P(drunk)",
+        xlim=(0.0, 1.1 * max_bac),
+        ylim=(-0.02, 1.02),
     )
+    bac_ax.grid(alpha=0.3)
+    _log_figure_with_step(bac_fig, f"{eval_type}_bac_probability", epoch)
 
 
 def _log_speaker_confident_errors(

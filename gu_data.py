@@ -223,24 +223,36 @@ class GUData(Dataset):
         test_frac: float = 0.1,
     ):
 
-        assert abs(train_frac+val_frac+test_frac-1.0) < 1e-6
+        fractions = (train_frac, val_frac, test_frac)
+        if any(not np.isfinite(value) or value <= 0 for value in fractions):
+            raise ValueError("GU split fractions must be positive and finite")
+        if abs(sum(fractions) - 1.0) >= 1e-6:
+            raise ValueError("GU split fractions must sum to one")
 
-        unique_speakers = torch.tensor(sorted(set(self.speaker_ids)), dtype=torch.long)
-        if self.verbose: print(f"Unique speakers from speaker ID {len(unique_speakers)}")
-
-        # Permutations
+        # Each GU speaker has one class, so split speakers within each cohort
+        # to keep both classes in every split without speaker leakage.
         generator = torch.Generator().manual_seed(self.seed)
-        n_speakers = len(unique_speakers)
-        perm = torch.randperm(n_speakers, generator=generator)
-
-        unique_speakers = unique_speakers[perm]
-
-        n_train = max(1, int(n_speakers * train_frac))
-        n_val = max(1, int(n_speakers * val_frac))
-
-        self.train_speakers_id = set(unique_speakers[:n_train].tolist())
-        self.val_speakers_id = set(unique_speakers[n_train:(n_train+n_val)].tolist())
-        self.test_speakers_id = set(unique_speakers[(n_train+n_val):].tolist())
+        self.train_speakers_id = set()
+        self.val_speakers_id = set()
+        self.test_speakers_id = set()
+        for class_label in sorted(self.class_mapping.values()):
+            speakers = sorted({
+                speaker for speaker, label in zip(self.speaker_ids, self.class_labels.tolist())
+                if label == class_label
+            })
+            n_speakers = len(speakers)
+            if n_speakers < 3:
+                raise ValueError(
+                    f"GU needs at least three speakers in class {class_label} "
+                    "for train/validation/test splitting"
+                )
+            permutation = torch.randperm(n_speakers, generator=generator).tolist()
+            speakers = [speakers[index] for index in permutation]
+            n_train = min(max(1, int(n_speakers * train_frac)), n_speakers - 2)
+            n_val = min(max(1, int(n_speakers * val_frac)), n_speakers - n_train - 1)
+            self.train_speakers_id.update(speakers[:n_train])
+            self.val_speakers_id.update(speakers[n_train:n_train + n_val])
+            self.test_speakers_id.update(speakers[n_train + n_val:])
 
         # Use for training to map speaker_id -> local_idx \in {0,1,...,len(train_speakers_id)-1} for CE-loss calculation
         self.train_speaker_mapping = {speaker_idx: local_idx for (local_idx,speaker_idx) in enumerate(sorted(self.train_speakers_id))}
