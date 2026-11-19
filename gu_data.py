@@ -168,7 +168,7 @@ class GUData(Dataset):
             path = Path(audio_file)
             label = GU_FOLDERS[path.parts[0]]
             values = GU_FILENAME_PATTERN.fullmatch(path.stem).groupdict()
-            # Numeric source IDs are local to each cohort, as in scripts/gu_eda.py.
+            # Numeric source IDs are local to each cohort.
             speaker_id = 2 * int(values["speaker_id"]) + self.class_mapping[label]
 
             self.files.append(audio_file)

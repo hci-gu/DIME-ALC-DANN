@@ -65,7 +65,8 @@ three queue slots are occupied.
 
 - [`model.py`](model.py), [`train.py`](train.py), and [`params.py`](params.py) define model architectures, training and evaluation routines, and experiment settings.
 - [`utils/`](utils/) contains shared CLI, training, and figure-logging utilities.
-- [`scripts/`](scripts/) contains data preparation, GU exploratory analysis, and plots for audio duration and OpenSMILE features.
+- [`scripts/`](scripts/) contains data preparation and plots for audio duration and OpenSMILE features.
+- The local `data/eda-gu.ipynb` notebook contains GU exploratory analysis and its audio-diagnostics helpers. Git ignores `data/`.
 - [`tests/`](tests/) covers GU datasets and workflows, evaluation diagnostics, and microphone inference with fixtures and synthetic inputs.
 
 ## Tests
