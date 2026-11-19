@@ -1,4 +1,4 @@
-"""Save five participant-level OpenSMILE t-SNE plots for ALC, SE-DAC218 and GU."""
+"""Save five OpenSMILE t-SNE plots for ALC, SE-DAC218 and GU."""
 
 import argparse
 from collections import defaultdict
@@ -45,14 +45,16 @@ def load_cache(path: Path | None) -> dict[str, torch.Tensor] | None:
     return cache["tensors"]
 
 
-def participant_features(
+def load_features(
     dataset: str,
     root: Path,
     cache_path: Path | None,
     max_samples: int | None,
     seed: int,
+    *,
+    aggregate_speakers: bool,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Average each participant's utterance features within each labeled condition."""
+    """Load utterance features or average them by speaker and condition."""
     tensors = load_cache(cache_path)
     groups: dict[Participant, list[str]] = defaultdict(list)
 
@@ -87,18 +89,24 @@ def participant_features(
                     speaker = str(int(path.stem.split("_")[-2]))
                     groups[(speaker, condition)].append(path.relative_to(audio_dir).as_posix())
 
-    participants = sorted(groups)
-    if {condition for _, condition in participants} != CONDITIONS.keys():
-        raise ValueError(f"{dataset} must contain both sober and intoxicated participant groups")
+    if not aggregate_speakers:
+        groups = {
+            (name, condition): [name]
+            for (_, condition), names in groups.items()
+            for name in names
+        }
+    samples = sorted(groups)
+    if {condition for _, condition in samples} != CONDITIONS.keys():
+        raise ValueError(f"{dataset} must contain both sober and intoxicated samples")
 
-    if max_samples is not None and len(participants) > max_samples:
+    if max_samples is not None and len(samples) > max_samples:
         rng = np.random.default_rng(seed)
-        shuffled = [participants[index] for index in rng.permutation(len(participants))]
-        # Keep at least one participant in each condition when subsampling.
+        shuffled = [samples[index] for index in rng.permutation(len(samples))]
+        # Keep at least one sample in each condition when subsampling.
         selected = {next(group for group in shuffled if group[1] == condition)
                     for condition in CONDITIONS}
         remaining = [group for group in shuffled if group not in selected]
-        participants = sorted(selected.union(remaining[:max_samples - len(selected)]))
+        samples = sorted(selected.union(remaining[:max_samples - len(selected)]))
 
     if tensors is None:
         print(f"{dataset}: extracting OpenSMILE features from {audio_dir}")
@@ -108,8 +116,8 @@ def participant_features(
         )
 
     features = []
-    for participant in tqdm(participants, desc=f"Preparing {dataset} participants"):
-        names = groups[participant]
+    for sample in tqdm(samples, desc=f"Preparing {dataset} samples"):
+        names = groups[sample]
         if tensors is None:
             utterances = np.concatenate([
                 processor.process_file(str(audio_dir / name)).to_numpy()
@@ -118,16 +126,19 @@ def participant_features(
         else:
             utterances = torch.stack([tensors[name] for name in names]).numpy()
         if utterances.ndim != 2 or len(utterances) != len(names) or not np.isfinite(utterances).all():
-            raise ValueError(f"Invalid OpenSMILE features for {dataset} participant {participant[0]}")
-        features.append(utterances.mean(axis=0, dtype=np.float64))
-    return np.stack(features), np.array([condition for _, condition in participants])
+            raise ValueError(f"Invalid OpenSMILE features for {dataset} sample {sample[0]}")
+        if aggregate_speakers:
+            features.append(utterances.mean(axis=0, dtype=np.float64))
+        else:
+            features.append(utterances[0].astype(np.float32, copy=False))
+    return np.stack(features), np.array([condition for _, condition in samples])
 
 
 def embed(features: np.ndarray, perplexity: float, seed: int, name: str) -> np.ndarray:
     """Standardize, reduce with PCA, and fit t-SNE without using class labels."""
-    # Keep the neighborhood size small enough for datasets with few participants.
+    # Keep the neighborhood size small enough for datasets with few points.
     perplexity = min(perplexity, max(1.0, (len(features) - 1) / 3))
-    print(f"Fitting {name}: {len(features)} participant-condition points, perplexity {perplexity:g}")
+    print(f"Fitting {name}: {len(features)} points, perplexity {perplexity:g}")
     scaled = StandardScaler().fit_transform(features)
     n_components = min(100, scaled.shape[0] - 1, scaled.shape[1])
     reduced = PCA(n_components=n_components, random_state=seed).fit_transform(scaled)
@@ -140,6 +151,7 @@ def save_plot(
     path: Path,
     title: str,
     groups: list[tuple[np.ndarray, str, str, str]],
+    point_description: str,
 ) -> None:
     """Save a scatter plot with a labeled series for each group."""
     fig, ax = plt.subplots(figsize=(8, 6), layout="constrained")
@@ -149,7 +161,7 @@ def save_plot(
     ax.set(xlabel="t-SNE 1", ylabel="t-SNE 2", title=title)
     ax.set_aspect("equal", adjustable="datalim")
     ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1), frameon=False)
-    fig.supxlabel("Each point represents one participant in one condition", fontsize=9)
+    fig.supxlabel(f"Each point represents {point_description}", fontsize=9)
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=200)
     plt.close(fig)
@@ -164,7 +176,13 @@ def main() -> None:
         parser.add_argument(f"--{key}-cache", type=Path, help=f"Override the {name} feature cache")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "figures")
     parser.add_argument("--output", type=Path, help="Override the path of the combined dataset plot")
-    parser.add_argument("--max-samples", type=int, help="Maximum participant-condition points per dataset")
+    parser.add_argument(
+        "--aggregate-speakers",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Average utterances within each speaker and condition (default: enabled)",
+    )
+    parser.add_argument("--max-samples", type=int, help="Maximum plotted points per dataset")
     parser.add_argument("--perplexity", type=float, default=30, help="Maximum t-SNE perplexity (default: 30)")
     parser.add_argument("--seed", type=int, default=1999)
     args = parser.parse_args()
@@ -180,9 +198,15 @@ def main() -> None:
         cache = getattr(args, f"{key}_cache")
         if cache is None and root.resolve() == ROOT / "data" / name:
             cache = ROOT / ".cache" / f"{key}-opensmile-features.pt"
-        datasets[name] = participant_features(name, root, cache, args.max_samples, args.seed)
+        datasets[name] = load_features(
+            name, root, cache, args.max_samples, args.seed,
+            aggregate_speakers=args.aggregate_speakers,
+        )
     all_features = np.concatenate([features for features, _ in datasets.values()])
     combined = embed(all_features, args.perplexity, args.seed, "all datasets")
+    point_description = (
+        "one participant in one condition" if args.aggregate_speakers else "one utterance"
+    )
 
     by_dataset = []
     by_dataset_and_condition = []
@@ -199,12 +223,13 @@ def main() -> None:
             by_condition.append((separate[mask], label, CONDITION_COLORS[condition], marker))
             by_dataset_and_condition.append((points[mask], f"{name} {label.lower()}", color, marker))
         save_plot(args.output_dir / f"tsne-{name.lower()}-by-condition.png",
-                  f"{name} OpenSMILE t-SNE by condition", by_condition)
+                  f"{name} OpenSMILE t-SNE by condition", by_condition, point_description)
 
     save_plot(args.output or args.output_dir / "tsne-all-by-dataset.png",
-              "OpenSMILE t-SNE by dataset", by_dataset)
+              "OpenSMILE t-SNE by dataset", by_dataset, point_description)
     save_plot(args.output_dir / "tsne-all-by-dataset-and-condition.png",
-              "OpenSMILE t-SNE by dataset and condition", by_dataset_and_condition)
+              "OpenSMILE t-SNE by dataset and condition", by_dataset_and_condition,
+              point_description)
 
 
 if __name__ == "__main__":
