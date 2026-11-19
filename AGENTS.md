@@ -2,14 +2,19 @@
 
 ## Datasets
 
-The datasets for this projects
-- ALC: The baseline dataset is the ALC dataset which is used to train a base model.
-- DAC: Will consists of 2 subsets, one used for finetuning and one for evaluation (only one subset present currently)
-- GU: internal data only used for evaluation (not added yet)
+- ALC (`--data alc`) is the default for DANN training and standalone evaluation and is used by the MLP baseline.
+- SE-DAC218 (`--data dac`) is the default finetuning target and also supports training and evaluation.
+- GU (`--data gu`) is an internal dataset supported by training, finetuning, and evaluation. Its two cohorts provide class labels. GU has no measured BAC values.
 
 ## Project Structure & Module Organization
 
-This repository is a Python 3.12 research project for training a domain-adversarial neural network on ALC and SE-DAC218 speech data. The main workflow starts in `main.py`. Model architecture lives in `model.py`, training and evaluation routines in `train.py`, dataset handling in `alc_data.py` and `dac218_data.py`, and experiment settings in `params.py`. `baseline.py`, `finetune.py`, and `evaluation.py` provide adjacent workflows. Reusable components belong in `utils/`; data preparation, profiling, and benchmarks belong in `scripts/`.
+This Python 3.12 research project trains domain-adversarial neural networks (DANNs) for speech-based intoxication classification.
+
+- `main.py` trains a DANN or runs Optuna hyperparameter optimization. `baseline.py` trains the ALC MLP baseline.
+- `finetune.py` adapts a DANN checkpoint to a different dataset. `evaluation.py` evaluates saved DANN checkpoints, and `inference.py` runs microphone inference on CPU.
+- `model.py` defines the models, `train.py` contains training and evaluation routines, and `params.py` defines experiment settings.
+- `alc_data.py`, `dac218_data.py`, and `gu_data.py` contain dataset loaders and OpenSMILE cache builders.
+- `utils/` contains shared components such as CLI parsing and evaluation figures. `scripts/` contains data preparation and exploratory analysis tools. `tests/` contains the pytest suite.
 
 Large or generated artifacts (`data/`, `.cache/`, `weights/`, `evals/`, `mlruns/`, TensorBoard output, and `mlflow.db`) are intentionally ignored and must not be committed.
 
@@ -17,21 +22,20 @@ Large or generated artifacts (`data/`, `.cache/`, `weights/`, `evals/`, `mlruns/
 
 - `uv sync --extra cpu` installs the locked CPU environment.
 - `uv sync --extra cuda` installs PyTorch from the CUDA 13.0 index for compatible systems.
-- `uv run python alc_data.py` or `uv run python dac218_data.py` creates the corresponding OpenSMILE feature cache from local audio. Each command expects its cache file not to exist yet.
-- `uv run python main.py --dev-run --n-epochs 1 --no-save-model --disable-logs` runs a training smoke test using the ALC data. `--dev-run` limits training batches but still loads the full dataset and evaluates the full validation and test splits.
-- `uv run python main.py --hpo` launches Optuna hyperparameter optimization; expect a long-running job.
-- `uv run mlflow server --host 127.0.0.1 --port 5000` serves local experiment tracking.
-- `uv run tensorboard --logdir scripts/profiling/tensorboard` displays profiler traces.
+- `uv run --no-sync python alc_data.py`, `uv run --no-sync python dac218_data.py`, and `uv run --no-sync python gu_data.py` create their respective OpenSMILE feature caches from local audio. Each command requires an unused cache path.
+- `uv run --no-sync python main.py --dev-run --n-epochs 1 --no-save-model --disable-logs` runs a training smoke test using ALC. It limits training batches and still loads the full dataset and evaluates the full validation and test splits.
+- `uv run --no-sync python main.py --hpo` launches Optuna hyperparameter optimization and can take a long time.
+- `uv run --no-sync mlflow server --host 127.0.0.1 --port 5000` serves experiment tracking.
 
-Use `uv run python <script>` so commands execute in the locked environment. `main.py --data dac` selects SE-DAC218; ALC is the default. `--disable-logs` routes MLflow output to a temporary store for that invocation. There is no separate build step.
+Run commands from the repository root after syncing the CPU or CUDA environment. `--disable-logs` routes training or finetuning MLflow output to a temporary store for that invocation. See the README for dataset paths and workflow examples.
 
 ## Coding Style & Naming Conventions
 
-Follow PEP 8 with four-space indentation. Use `snake_case` for modules, functions, variables, and CLI flags; use `PascalCase` for classes such as `DANN` and `ALCData`; reserve uppercase names for true constants. Add type hints to new public functions and keep imports grouped as standard library, third-party, then local modules. No formatter or linter is currently configured, so match nearby code and keep changes focused.
+Follow PEP 8 with four-space indentation. Use `snake_case` for modules, functions, and variables, and use hyphenated CLI flags such as `--batch-size`. Use `PascalCase` for classes and reserve uppercase names for constants. Add type hints to new public functions and group imports as standard library, third-party, then local modules. Match nearby code and keep changes focused.
 
 ## Testing Guidelines
 
-No automated test suite or coverage threshold exists yet. For every change, run a focused smoke test and compile affected modules with `uv run python -m py_compile <files>`. New tests should use `pytest`, live under `tests/`, and follow `test_<module>.py` and `test_<behavior>()` naming. Avoid tests that require the full private dataset; use small fixtures or synthetic tensors.
+The pytest suite covers GU data and workflows, evaluation diagnostics, and microphone inference. Run it with `uv run --extra cpu --with pytest python -m pytest`, or substitute `--extra cuda` for a CUDA environment. Append a path under `tests/` to run a focused subset. For Python changes, run the relevant tests or smoke test and compile affected modules with `uv run --no-sync python -m py_compile <files>`. Name new tests `tests/test_<module>.py` and `test_<behavior>()`. Use small fixtures or synthetic tensors so tests can run without private datasets.
 
 ## Commit & Pull Request Guidelines
 
