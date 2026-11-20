@@ -1,4 +1,4 @@
-"""Evaluate speaker-specific reconstruction thresholds on ALC utterances."""
+"""Evaluate speaker-specific intoxication scores on ALC utterances."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import math
 import random
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from io import StringIO
 from typing import TYPE_CHECKING
 
@@ -33,6 +33,7 @@ class SpeakerSplit:
     calibration: list[int]
     sober_test: list[int]
     intoxicated: list[int]
+    intoxicated_enrollment: list[int] = field(default_factory=list)
 
     @property
     def test(self) -> list[int]:
@@ -46,23 +47,32 @@ class SpeakerScores:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate sober reconstruction models on ALC")
+    parser = argparse.ArgumentParser(description="Evaluate speaker-specific intoxication models on ALC")
     parser.add_argument("--run-name")
     parser.add_argument("--seed", type=non_negative_int, default=1999)
     parser.add_argument("--n-epochs", type=positive_int, default=50)
     parser.add_argument("--batch-size", type=positive_int, default=8)
     parser.add_argument("--learning-rate", type=float, default=0.001)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
-    parser.add_argument("--method", choices=("mlp", "pca", "shared-mlp"), default="mlp")
+    parser.add_argument("--method", choices=("mlp", "pca", "shared-mlp", "logistic"), default="mlp")
     parser.add_argument("--feature-set", choices=("ComParE_2016", "eGeMAPSv02"), default="ComParE_2016")
     parser.add_argument("--threshold-sweep", action="store_true", help="Select a cutoff on development speakers")
     parser.add_argument("--target-fpr", type=float, default=0.15, help="Maximum development sober false-positive rate")
     parser.add_argument("--pca-components", type=positive_int, default=BOTTLENECK_DIMENSION)
+    parser.add_argument("--lr-c", type=float, default=0.1, help="Inverse L2 regularization strength for logistic regression")
+    parser.add_argument(
+        "--reserve-intoxicated-training", action="store_true",
+        help="Use the same 40%% intoxicated test subset as logistic regression",
+    )
     args = parser.parse_args()
     if args.seed >= 2**64:
         parser.error("--seed must be smaller than 2**64")
     if not math.isfinite(args.learning_rate) or args.learning_rate <= 0:
         parser.error("--learning-rate must be finite and positive")
+    if not math.isfinite(args.lr_c) or args.lr_c <= 0:
+        parser.error("--lr-c must be finite and positive")
+    if args.method == "logistic" and args.device == "cuda":
+        parser.error("--method logistic uses CPU. Choose --device cpu or auto")
     if args.device == "cuda" and not torch.cuda.is_available():
         parser.error("--device cuda requires an available CUDA device")
     if not 0 <= args.target_fpr <= 1:
@@ -183,7 +193,7 @@ def _aggregate_metrics(rows: list[dict[str, int | float]]) -> dict[str, float]:
 
 
 def _speaker_splits(
-    data: ALCData, seed: int,
+    data: ALCData, seed: int, *, reserve_intoxicated_training: bool = False,
 ) -> tuple[dict[int, SpeakerSplit], list[dict[str, int | str]]]:
     by_speaker = defaultdict(lambda: defaultdict(list))
     for index, (speaker_id, label) in enumerate(zip(data.speaker_ids, data.class_labels.tolist(), strict=True)):
@@ -191,19 +201,26 @@ def _speaker_splits(
 
     splits = {}
     skipped = []
+    minimum_intoxicated = 2 if reserve_intoxicated_training else 1
     for speaker_id, indices in sorted(by_speaker.items()):
         sober = indices[data.class_mapping["na"]]
         intoxicated = indices[data.class_mapping["a"]]
         train, calibration, test = _split_sober_indices(sober, seed, speaker_id)
-        if train and calibration and test and intoxicated:
-            splits[speaker_id] = SpeakerSplit(train, calibration, test, intoxicated)
-        else:
+        if not (train and calibration and test) or len(intoxicated) < minimum_intoxicated:
             skipped.append({
                 "speaker_id": speaker_id,
                 "n_sober": len(sober),
                 "n_intoxicated": len(intoxicated),
-                "reason": "insufficient sober utterances" if len(sober) < 5 else "missing intoxicated utterances",
+                "reason": "insufficient sober utterances" if len(sober) < 5 else "insufficient intoxicated utterances",
             })
+            continue
+        intoxicated_enrollment = []
+        if reserve_intoxicated_training:
+            intoxicated = sorted(intoxicated)
+            random.Random(f"{seed}:{speaker_id}:intoxicated").shuffle(intoxicated)
+            n_train = 3 * len(intoxicated) // 5
+            intoxicated_enrollment, intoxicated = intoxicated[:n_train], intoxicated[n_train:]
+        splits[speaker_id] = SpeakerSplit(train, calibration, test, intoxicated, intoxicated_enrollment)
     return splits, skipped
 
 
@@ -233,11 +250,31 @@ def _fit_shared_autoencoder(
     return _fit_autoencoder(torch.cat(parts).to(device), args)
 
 
+def _fit_logistic_regression(
+    sober_train: Tensor, intoxicated_train: Tensor, c: float,
+) -> Callable[[Tensor], Tensor]:
+    from sklearn.linear_model import LogisticRegression
+
+    features = torch.cat((sober_train, intoxicated_train))
+    labels = [0] * len(sober_train) + [1] * len(intoxicated_train)
+    model = LogisticRegression(C=c, class_weight="balanced", solver="lbfgs", max_iter=1000)
+    model.fit(features.numpy(), labels)
+
+    def score(inputs: Tensor) -> Tensor:
+        return torch.from_numpy(model.decision_function(inputs.numpy()))
+
+    return score
+
+
 def _speaker_scores(
     data: ALCData, split: SpeakerSplit, args: argparse.Namespace,
     device: torch.device, shared_model: nn.Module | None,
 ) -> SpeakerScores:
     train, calibration, test = _speaker_features(data, split.train, split.calibration, split.test, device)
+    if args.method == "logistic":
+        intoxicated_train = _normalized_features(data, split.intoxicated_enrollment)
+        score = _fit_logistic_regression(train, intoxicated_train, args.lr_c)
+        return SpeakerScores(score(calibration), score(test))
     if shared_model is not None:
         model = shared_model
     elif args.method == "pca":
@@ -259,6 +296,7 @@ def _speaker_metrics(
         rows.append({
             "speaker_id": speaker_id,
             "n_train_sober": len(split.train),
+            "n_reserved_intoxicated": len(split.intoxicated_enrollment),
             "n_calibration_sober": len(split.calibration),
             "n_test_sober": len(split.sober_test),
             "n_test_intoxicated": len(split.intoxicated),
@@ -305,10 +343,11 @@ def _macro_roc_recall_at_fpr(
 
 def _diagnostic_rows(
     data: ALCData, splits: dict[int, SpeakerSplit],
-    cohort_scores: dict[str, dict[int, SpeakerScores]],
+    cohort_scores: dict[str, dict[int, SpeakerScores]], *, logistic: bool = False,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     utterances = []
     pairs = []
+    score_field = "decision_score" if logistic else "reconstruction_error"
     for cohort, scores in cohort_scores.items():
         for speaker_id, errors in scores.items():
             split = splits[speaker_id]
@@ -323,9 +362,11 @@ def _diagnostic_rows(
                     "split": partition,
                     "file": data.files[index],
                     "label": int(data.class_labels[index]),
-                    "reconstruction_error": error,
+                    score_field: error,
                 } for index, error in zip(indices, values, strict=True))
 
+            if logistic:
+                continue
             sober_by_utterance_id = {data.files[index].split("_", 1)[0]: index for index in split.sober_test}
             for index in split.intoxicated:
                 sober_index = sober_by_utterance_id.get(data.paired_utterance_ids[index])
@@ -361,13 +402,17 @@ def main() -> None:
 
     from alc_data import ALCData
 
-    device = args.device
+    logistic = args.method == "logistic"
+    device = "cpu" if logistic else args.device
     if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
     device = torch.device(device)
     torch.manual_seed(args.seed)
     data = ALCData(seed=args.seed, feature_set=args.feature_set)
-    splits, skipped = _speaker_splits(data, args.seed)
+    reserve_intoxicated_training = logistic or args.reserve_intoxicated_training
+    splits, skipped = _speaker_splits(
+        data, args.seed, reserve_intoxicated_training=reserve_intoxicated_training,
+    )
 
     mlflow.set_experiment("autoencoder")
     print(f"MLflow tracking URI: {mlflow.get_tracking_uri()}")
@@ -377,6 +422,7 @@ def main() -> None:
             "feature_set": data.cache_dict["feature_set"],
             "feature_level": data.cache_dict["feature_level"],
             "sober_split": "60/20/20",
+            "intoxicated_split": "60/40" if reserve_intoxicated_training else "0/100",
             "method": args.method,
             "threshold_sweep": args.threshold_sweep,
             "seed": args.seed,
@@ -384,6 +430,8 @@ def main() -> None:
         })
         if args.method == "pca":
             mlflow.log_param("pca_components", args.pca_components)
+        elif logistic:
+            mlflow.log_params({"lr_c": args.lr_c, "regularization": "L2", "class_weight": "balanced"})
         else:
             mlflow.log_params({
                 "hidden_dimension": HIDDEN_DIMENSION,
@@ -419,7 +467,7 @@ def main() -> None:
             for speaker_id in tqdm(partitions[cohort], desc=f"ALC {cohort} speakers"):
                 errors = _speaker_scores(data, splits[speaker_id], args, device, shared_model)
                 if not (torch.isfinite(errors.calibration).all() and torch.isfinite(errors.test).all()):
-                    raise RuntimeError(f"Non-finite reconstruction errors for speaker {speaker_id}")
+                    raise RuntimeError(f"Non-finite scores for speaker {speaker_id}")
                 scores[speaker_id] = errors
             cohort_scores[cohort] = scores
             if cohort == "development":
@@ -437,13 +485,14 @@ def main() -> None:
             metrics["macro_roc_recall_at_target_fpr"] = _macro_roc_recall_at_fpr(
                 splits, cohort_scores["held_out"], args.target_fpr,
             )
-        utterances, pairs = _diagnostic_rows(data, splits, cohort_scores)
-        held_out_pairs = [pair for pair in pairs if pair["cohort"] == "held_out"]
+        utterances, pairs = _diagnostic_rows(data, splits, cohort_scores, logistic=logistic)
         metrics["speakers_evaluated"] = len(rows)
-        metrics["matched_prompt_pairs"] = len(held_out_pairs)
-        if held_out_pairs:
-            higher = sum(pair["intoxicated_error"] > pair["sober_error"] for pair in held_out_pairs)
-            metrics["matched_prompt_intoxicated_higher_fraction"] = higher / len(held_out_pairs)
+        if not logistic:
+            held_out_pairs = [pair for pair in pairs if pair["cohort"] == "held_out"]
+            metrics["matched_prompt_pairs"] = len(held_out_pairs)
+            if held_out_pairs:
+                higher = sum(pair["intoxicated_error"] > pair["sober_error"] for pair in held_out_pairs)
+                metrics["matched_prompt_intoxicated_higher_fraction"] = higher / len(held_out_pairs)
         mlflow.log_metrics(metrics)
         mlflow.log_text(_csv_text(rows), "speaker_metrics.csv")
         mlflow.log_text(_csv_text(utterances), "utterance_scores.csv")

@@ -53,7 +53,7 @@ uv run --no-sync python autoencoder.py --device cuda --run-name alc-speaker-ae
 
 The script uses a seeded 60/20/20 split of each speaker's sober utterances. It fits feature standardization and the MLP on the training split, sets the reconstruction-error threshold at the 95th percentile of the calibration split, and tests on the remaining sober utterances and all intoxicated utterances.
 
-The MLflow experiment `autoencoder` records one run per invocation. Download `speaker_metrics.csv` for per-speaker thresholds, counts, precision, recall, F1, and balanced accuracy. Run metrics prefixed with `macro_` weight speakers equally. Metrics prefixed with `pooled_` combine their test confusion counts before calculating each score. The default `--device auto` selects CUDA when available and uses CPU otherwise.
+The MLflow experiment `autoencoder` records one run per invocation. Download `speaker_metrics.csv` for per-speaker thresholds, counts, precision, recall, F1, and balanced accuracy. Run metrics prefixed with `macro_` weight speakers equally. Metrics prefixed with `pooled_` combine their test confusion counts before calculating each score. For reconstruction models, `--device auto` selects CUDA when available and uses CPU otherwise.
 
 ### Compare recall at a common false-positive target
 
@@ -72,6 +72,17 @@ The sweep divides eligible speakers into a shared-model training cohort, a devel
 `threshold_sweep.csv` reports the development results for sober calibration percentiles 80, 85, 90, and 95. The selected percentile gives the highest pooled development recall within the target sober false-positive rate. If none qualifies, the rule predicts sober for every utterance. Compare `pooled_recall` and the achieved `pooled_sober_fpr` together on the final cohort. The development target and final false-positive rate can differ. For a comparison at exactly the same target, `macro_roc_recall_at_target_fpr` interpolates each final speaker's ROC curve and averages their recall. This diagnostic uses test labels to evaluate score ranking and is independent of cutoff selection.
 
 `utterance_scores.csv` contains the calibration and test reconstruction errors, with their speaker cohort and class labels. `matched_prompts.csv` lists paired sober and intoxicated test utterances linked by the ALC annotations. MLflow logs how often the intoxicated utterance scores higher in the final cohort. `speaker_partitions.json` records the cohort assignments. The original command without `--threshold-sweep` evaluates all eligible speakers at the fixed 95th percentile and also logs the score and prompt diagnostics.
+
+### Per-speaker logistic regression
+
+Use the eGeMAPS cache built above to fit one L2-regularized logistic regression per speaker. The model uses OpenSMILE features and applies the same speaker-specific standardization to both classes, fitted on the speaker's sober training utterances. Each fit uses 36 sober and 18 intoxicated utterances on the full ALC dataset. The cutoff is calibrated on 12 separate sober utterances, and the test set has 12 sober and 12 intoxicated utterances per speaker. The protocol uses labeled intoxicated enrollment from each evaluated speaker and holds out utterances within the ALC recording sessions.
+
+```bash
+uv run --no-sync python autoencoder.py --method logistic --feature-set eGeMAPSv02 --threshold-sweep --target-fpr 0.15 --device cpu --run-name egemaps-speaker-lr
+uv run --no-sync python autoencoder.py --method mlp --feature-set eGeMAPSv02 --threshold-sweep --target-fpr 0.15 --reserve-intoxicated-training --device cuda --run-name egemaps-mlp-same-test
+```
+
+The second command evaluates the sober-only MLP on the same held-out utterances when the seed matches. `--lr-c` controls inverse regularization strength and defaults to `0.1`. Logistic regression uses class-balanced training weights and logs `decision_score` in `utterance_scores.csv`. Compare `macro_roc_recall_at_target_fpr`, `pooled_recall`, and `pooled_sober_fpr` in MLflow.
 
 ## Microphone inference
 

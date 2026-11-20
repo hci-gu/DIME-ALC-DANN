@@ -24,6 +24,7 @@ from autoencoder import (
     _score_errors,
     _speaker_features,
     _speaker_partitions,
+    _speaker_splits,
     _split_sober_indices,
     _threshold_sweep,
 )
@@ -223,3 +224,61 @@ def test_shared_cli_fits_only_reference_speakers_and_reports_held_out_metrics(mo
     assert len(artifacts["threshold_sweep.csv"]) == 4
     assert [int(row["speaker_id"]) for row in artifacts["speaker_metrics.csv"]] == partitions["held_out"]
     assert {row["cohort"] for row in artifacts["utterance_scores.csv"]} == {"development", "held_out"}
+
+
+def test_logistic_cli_fits_each_speaker_and_reserves_a_common_test_set(monkeypatch):
+    speakers = list(range(6, 12))
+    data = ALCData.__new__(ALCData)
+    data.speaker_ids = [speaker_id for speaker_id in speakers for _ in range(90)]
+    data.files = [f"{speaker_id:03d}{index:07d}_h.wav" for index, speaker_id in enumerate(data.speaker_ids)]
+    values = torch.cat([torch.linspace(-1, 1, 60), torch.linspace(10, 11, 30)])
+    data.tensors_dict = {
+        file: (values[index % 90] * (-1) ** speaker_id).reshape(1)
+        for index, (file, speaker_id) in enumerate(zip(data.files, data.speaker_ids, strict=True))
+    }
+    data.class_labels = torch.tensor(([0] * 60 + [1] * 30) * len(speakers))
+    data.class_mapping = {"na": 0, "a": 1}
+    data.cache_dict = {"feature_set": "eGeMAPSv02", "feature_level": "Functionals"}
+    data.bac_values = data.class_labels.tolist()
+    data.train_speaker_mapping = {}
+    data.include_audio_length = False
+    data.transforms = None
+    data.verbose = False
+
+    baseline_splits, _ = _speaker_splits(data, seed=1999)
+    common_splits, skipped = _speaker_splits(data, seed=1999, reserve_intoxicated_training=True)
+    assert not skipped
+    for speaker_id, split in common_splits.items():
+        assert (len(split.train), len(split.intoxicated_enrollment), len(split.test)) == (36, 18, 24)
+        assert set(split.intoxicated_enrollment).isdisjoint(split.test)
+        assert set(split.intoxicated_enrollment + split.intoxicated) == set(baseline_splits[speaker_id].intoxicated)
+        assert split.sober_test == baseline_splits[speaker_id].sober_test
+
+    fit = Mock(wraps=autoencoder._fit_logistic_regression)
+    tracking = Mock()
+    tracking.start_run.return_value = nullcontext(SimpleNamespace(info=SimpleNamespace(run_id="synthetic")))
+    monkeypatch.setattr(alc_data, "ALCData", Mock(return_value=data))
+    monkeypatch.setattr(autoencoder, "_fit_logistic_regression", fit)
+    monkeypatch.setitem(sys.modules, "mlflow", tracking)
+    monkeypatch.setattr(sys, "argv", [
+        "autoencoder.py", "--method", "logistic", "--feature-set", "eGeMAPSv02", "--threshold-sweep",
+    ])
+
+    autoencoder.main()
+
+    partitions = _speaker_partitions(speakers, seed=1999)
+    scored_speakers = partitions["development"] + partitions["held_out"]
+    assert fit.call_count == len(scored_speakers)
+    for speaker_id, call in zip(scored_speakers, fit.call_args_list, strict=True):
+        split = common_splits[speaker_id]
+        sober = torch.stack([data.tensors_dict[data.files[index]] for index in split.train])
+        intoxicated = torch.stack([data.tensors_dict[data.files[index]] for index in split.intoxicated_enrollment])
+        torch.testing.assert_close(call.args[1], (intoxicated - sober.mean(dim=0)) / sober.std(dim=0, unbiased=False))
+
+    artifacts = {call.args[1]: list(csv.DictReader(call.args[0].splitlines())) for call in tracking.log_text.call_args_list}
+    held_out_rows = [row for row in artifacts["utterance_scores.csv"] if row["cohort"] == "held_out" and row["split"] == "test"]
+    assert {row["file"] for row in held_out_rows} == {
+        data.files[index] for speaker_id in partitions["held_out"] for index in common_splits[speaker_id].test
+    }
+    assert "decision_score" in held_out_rows[0]
+    assert tracking.log_metrics.call_args.args[0]["macro_roc_recall_at_target_fpr"] == pytest.approx(1.0)
