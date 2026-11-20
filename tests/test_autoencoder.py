@@ -144,6 +144,16 @@ def test_prompt_diagnostic_pairs_only_annotated_test_utterances():
     assert pairs[0]["error_difference"] == 3.0
 
 
+def test_missing_egemaps_cache_reports_build_command(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(FileNotFoundError) as exc:
+        ALCData(feature_set="eGeMAPSv02")
+
+    assert str(tmp_path / ".cache" / "alc-egemaps-features.pt") in str(exc.value)
+    assert "uv run --no-sync python alc_data.py --feature-set eGeMAPSv02" in str(exc.value)
+
+
 def test_egemaps_cache_round_trip_keeps_compare_cache_separate(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     audio_dir = tmp_path / "wav" / "h"

@@ -116,6 +116,12 @@ class ALCData(Dataset):
             self.cache_dict = torch.load(cache_path, map_location="cpu")
             if self.verbose:
                 print(f"Loaded in cache | FS: {self.cache_dict["feature_set"]} | FL: {self.cache_dict["feature_level"]} | Files: {len(self.cache_dict["tensors"])}")
+        except FileNotFoundError as error:
+            raise FileNotFoundError(
+                f"Missing ALC {self.feature_set} cache at {osp.abspath(cache_path)}. "
+                "Build it from the repository root with "
+                f"`uv run --no-sync python alc_data.py --feature-set {self.feature_set}`."
+            ) from error
         except Exception as e:
             raise FileNotFoundError(f"Failed to load in cache file: {e}")
 

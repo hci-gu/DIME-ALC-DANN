@@ -75,7 +75,13 @@ The sweep divides eligible speakers into a shared-model training cohort, a devel
 
 ### Per-speaker logistic regression
 
-Use the eGeMAPS cache built above to fit one L2-regularized logistic regression per speaker. The model uses OpenSMILE features and applies the same speaker-specific standardization to both classes, fitted on the speaker's sober training utterances. Each fit uses 36 sober and 18 intoxicated utterances on the full ALC dataset. The cutoff is calibrated on 12 separate sober utterances, and the test set has 12 sober and 12 intoxicated utterances per speaker. The protocol uses labeled intoxicated enrollment from each evaluated speaker and holds out utterances within the ALC recording sessions.
+From the repository root, build `.cache/alc-egemaps-features.pt` once if it is absent.
+
+```bash
+uv run --no-sync python alc_data.py --feature-set eGeMAPSv02
+```
+
+Fit one L2-regularized logistic regression per speaker. The model uses OpenSMILE features and applies the same speaker-specific standardization to both classes, fitted on the speaker's sober training utterances. Each fit uses 36 sober and 18 intoxicated utterances on the full ALC dataset. The cutoff is calibrated on 12 separate sober utterances, and the test set has 12 sober and 12 intoxicated utterances per speaker. The protocol uses labeled intoxicated enrollment from each evaluated speaker and holds out utterances within the ALC recording sessions.
 
 ```bash
 uv run --no-sync python autoencoder.py --method logistic --feature-set eGeMAPSv02 --threshold-sweep --target-fpr 0.15 --device cpu --run-name egemaps-speaker-lr
