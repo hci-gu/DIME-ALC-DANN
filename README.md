@@ -43,6 +43,18 @@ For GU training and finetuning, speakers are split within each cohort so all thr
 
 Run `uv run --no-sync python baseline.py` for the ALC MLP baseline or `uv run --no-sync python main.py --hpo` for Optuna hyperparameter optimization.
 
+## ALC per-speaker autoencoders
+
+On the DGX Spark, use the CUDA environment from [Setup](#setup). If `.cache/alc-opensmile-features.pt` is absent, build it first with `uv run --no-sync python alc_data.py`. Keep the ALC headset WAV files and labels in their usual locations.
+
+```bash
+uv run --no-sync python autoencoder.py --device cuda --run-name alc-speaker-ae
+```
+
+The script uses a seeded 60/20/20 split of each speaker's sober utterances. It fits feature standardization and the MLP on the training split, sets the reconstruction-error threshold at the 95th percentile of the calibration split, and tests on the remaining sober utterances and all intoxicated utterances.
+
+The MLflow experiment `autoencoder` records one run per invocation. Download `speaker_metrics.csv` for per-speaker thresholds, counts, precision, recall, F1, and balanced accuracy. Run metrics prefixed with `macro_` weight speakers equally. Metrics prefixed with `pooled_` combine their test confusion counts before calculating each score. The default `--device auto` selects CUDA when available and uses CPU otherwise.
+
 ## Microphone inference
 
 Use a DANN checkpoint saved by training or finetuning, including its normalization statistics. Pass its file path to `--checkpoint`.
