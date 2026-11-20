@@ -55,6 +55,24 @@ The script uses a seeded 60/20/20 split of each speaker's sober utterances. It f
 
 The MLflow experiment `autoencoder` records one run per invocation. Download `speaker_metrics.csv` for per-speaker thresholds, counts, precision, recall, F1, and balanced accuracy. Run metrics prefixed with `macro_` weight speakers equally. Metrics prefixed with `pooled_` combine their test confusion counts before calculating each score. The default `--device auto` selects CUDA when available and uses CPU otherwise.
 
+### Compare recall at a common false-positive target
+
+Run each comparison with the same seed and `--target-fpr` so the models use the same speaker cohorts, utterance splits, and development false-positive limit. The commands below use the default seed of 1999 and a target of 15%. Build the separate 88-feature eGeMAPS cache once for the eGeMAPS comparison.
+
+```bash
+uv run --no-sync python alc_data.py --feature-set eGeMAPSv02
+uv run --no-sync python autoencoder.py --threshold-sweep --target-fpr 0.15 --device cuda --run-name compare-mlp
+uv run --no-sync python autoencoder.py --threshold-sweep --target-fpr 0.15 --method pca --device cuda --run-name compare-pca
+uv run --no-sync python autoencoder.py --threshold-sweep --target-fpr 0.15 --feature-set eGeMAPSv02 --device cuda --run-name egemaps-mlp
+uv run --no-sync python autoencoder.py --threshold-sweep --target-fpr 0.15 --method shared-mlp --device cuda --run-name compare-shared-mlp
+```
+
+The sweep divides eligible speakers into a shared-model training cohort, a development cohort, and a final evaluation cohort in a seeded 60/20/20 split. PCA defaults to eight components and fits on each speaker's sober training utterances. The optional shared MLP fits on the training cohort's standardized sober training utterances. It uses each evaluation speaker's own sober training subset for standardization and sober calibration subset for the cutoff.
+
+`threshold_sweep.csv` reports the development results for sober calibration percentiles 80, 85, 90, and 95. The selected percentile gives the highest pooled development recall within the target sober false-positive rate. If none qualifies, the rule predicts sober for every utterance. Compare `pooled_recall` and the achieved `pooled_sober_fpr` together on the final cohort. The development target and final false-positive rate can differ. For a comparison at exactly the same target, `macro_roc_recall_at_target_fpr` interpolates each final speaker's ROC curve and averages their recall. This diagnostic uses test labels to evaluate score ranking and is independent of cutoff selection.
+
+`utterance_scores.csv` contains the calibration and test reconstruction errors, with their speaker cohort and class labels. `matched_prompts.csv` lists paired sober and intoxicated test utterances linked by the ALC annotations. MLflow logs how often the intoxicated utterance scores higher in the final cohort. `speaker_partitions.json` records the cohort assignments. The original command without `--threshold-sweep` evaluates all eligible speakers at the fixed 95th percentile and also logs the score and prompt diagnostics.
+
 ## Microphone inference
 
 Use a DANN checkpoint saved by training or finetuning, including its normalization statistics. Pass its file path to `--checkpoint`.

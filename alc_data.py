@@ -1,3 +1,4 @@
+import argparse
 import os
 import json
 import torch
@@ -11,19 +12,27 @@ from time import time
 from tqdm import tqdm
 from torch.utils.data import Dataset, Subset
 
+ALC_FEATURE_CACHES = {
+    "ComParE_2016": osp.join(".cache", "alc-opensmile-features.pt"),
+    "eGeMAPSv02": osp.join(".cache", "alc-egemaps-features.pt"),
+}
+
 def hash_audio_file(file_path):
     with open(file_path, "rb") as f:
         digest = hashlib.file_digest(f, "sha256")
     return digest.hexdigest()
 
 
-def cache_alc_data(audio_directory_path):
+def cache_alc_data(
+    audio_directory_path: str | os.PathLike, *, feature_set_name: str = "ComParE_2016",
+) -> None:
 
     # Read in audio files and sort them
     files = sorted([file for file in os.listdir(audio_directory_path) if file.endswith(".wav")])
 
     # Define Opensmile pre-processor
-    feature_set = opensmile.FeatureSet.ComParE_2016
+    cache_path = ALC_FEATURE_CACHES[feature_set_name]
+    feature_set = opensmile.FeatureSet[feature_set_name]
     feature_level = opensmile.FeatureLevel.Functionals
     processor = opensmile.Smile(
         feature_set=feature_set,
@@ -31,7 +40,6 @@ def cache_alc_data(audio_directory_path):
     )
 
     os.makedirs(".cache", exist_ok=True)
-    cache_path = osp.join(".cache","alc-opensmile-features.pt")
     if os.path.exists(cache_path):
         raise RuntimeError(f"Cache file {cache_path} already exists. Delete it to process a new one")
     cache_data_dict = {}
@@ -78,6 +86,7 @@ class ALCData(Dataset):
         seed: int = 1999,
         verbose: bool = False,
         include_audio_length: bool = False,
+        feature_set: str = "ComParE_2016",
         ):
         super().__init__()
 
@@ -88,6 +97,7 @@ class ALCData(Dataset):
         self.transforms = transforms
         self.verbose = verbose
         self.include_audio_length = include_audio_length
+        self.feature_set = feature_set
         self.lower_bac_limit = lower_bac_limit
         self.seed = seed
         self.is_split = False
@@ -102,14 +112,14 @@ class ALCData(Dataset):
 
         # Load in cache file
         try:
-            cache_path = osp.join(".cache","alc-opensmile-features.pt")
+            cache_path = ALC_FEATURE_CACHES[self.feature_set]
             self.cache_dict = torch.load(cache_path, map_location="cpu")
             if self.verbose:
                 print(f"Loaded in cache | FS: {self.cache_dict["feature_set"]} | FL: {self.cache_dict["feature_level"]} | Files: {len(self.cache_dict["tensors"])}")
         except Exception as e:
             raise FileNotFoundError(f"Failed to load in cache file: {e}")
 
-        assert self.cache_dict["feature_set"] == "ComParE_2016"
+        assert self.cache_dict["feature_set"] == self.feature_set, f"Unexpected feature set in {cache_path}"
         assert self.cache_dict["feature_level"] == "Functionals"
 
         # Read in all files from paths
@@ -137,6 +147,7 @@ class ALCData(Dataset):
         self.speaker_id_to_index = {} # speaker_id : speaker_index (used to map random speakerID to 0,1,2,...,n_speakers-1)
         self.speaker_ids = [] # list of speaker ids (duplicates can occur)
         self.bac_values = [] # blood alcohol concentration in per mille
+        self.paired_utterance_ids: list[str | None] = []
         for audio_file in tqdm(matched_audio_files):
 
             # Validate correct hash
@@ -180,6 +191,7 @@ class ALCData(Dataset):
                 self.class_labels.append(self.class_mapping[label]) # list of integer class labels
                 self.speaker_ids.append(speaker_id) # list of the speaker ids
                 self.bac_values.append(bac_per_mille)
+                self.paired_utterance_ids.append(labels_by_name.get("o_utt"))
                 if speaker_id not in self.speaker_id_to_index:
                     self.speaker_id_to_index[speaker_id] = len(self.speaker_id_to_index)
 
@@ -349,10 +361,10 @@ class ALCData(Dataset):
 
 
 if __name__ == "__main__":
-
-    audio_directory_path = osp.join("data","ALC","wav","h")
-    cache_path = osp.join(".cache","alc-opensmile-features.pt")
-    cache_alc_data(audio_directory_path)
+    parser = argparse.ArgumentParser(description="Build an ALC OpenSMILE feature cache")
+    parser.add_argument("--feature-set", choices=ALC_FEATURE_CACHES, default="ComParE_2016")
+    args = parser.parse_args()
+    cache_alc_data(osp.join("data", "ALC", "wav", "h"), feature_set_name=args.feature_set)
 
     # print(f"Loading data...")
     # t = time()
